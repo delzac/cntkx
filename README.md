@@ -2,6 +2,11 @@
 Deep learning library that builds on Microsoft CNTK. More models and pre-built components coming soon!
 
 ## News
+***2018-12-07***
+### New sequence ops: `cntkx.ops.sequence.pad` and `cntkx.ops.sequence.length`
+Added two new sequence ops. `cntkx.ops.sequence.pad` allows padding on the sequence axis and 
+`cntkx.ops.sequence.length` calculates the length of the sequence.
+
 ***2018-12-05.***
 #### Mixture Density Network
 Mixture density networks are neural networks that can in principle represent arbitrary conditional 

@@ -3,7 +3,7 @@ Deep learning library that builds on Microsoft CNTK. More models and pre-built c
 
 ## News
 ***2018-12-07***
-### New sequence ops: `cntkx.ops.sequence.pad` and `cntkx.ops.sequence.length`
+#### New sequence ops: `cntkx.ops.sequence.pad` and `cntkx.ops.sequence.length`
 Added two new sequence ops. `cntkx.ops.sequence.pad` allows padding on the sequence axis and 
 `cntkx.ops.sequence.length` calculates the length of the sequence.
 

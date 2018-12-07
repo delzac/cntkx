@@ -1,7 +1,8 @@
 import cntk as C
-from cntk.layers import Recurrence, Dense
+from cntk.layers import Recurrence
 
 
+@C.typemap
 def pad(x, pattern, mode=C.CONSTANT_PAD, constant_value=0, name=''):
     """
     Pads a tensor in the sequence axis according to the specified patterns.

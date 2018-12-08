@@ -1,4 +1,29 @@
 import cntk as C
+import numpy as np
+
+
+##########################################################################
+# linear ops
+##########################################################################
+
+def cumsum(x, axis: int=-1):
+    """ Calculates the cumulative sum across a static axis
+
+    Arguments:
+        x: input tensor
+        axis (int): static axis of tensor to cumsum over
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+    """
+    d = x.shape[axis]
+    u = C.constant(np.triu(np.ones((d,d))).astype(x.dtype))
+    if axis != -1:
+        x = C.swapaxes(x, -1, axis)
+    z = C.times(x, u)
+    if axis != -1:
+        z = C.swapaxes(z, -1, axis)
+    return z
 
 
 ##########################################################################

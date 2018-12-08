@@ -2,6 +2,14 @@
 Deep learning library that builds on Microsoft CNTK. More models and pre-built components coming soon!
 
 ## News
+***2018-12-08***
+#### Added QRNN: Quasi-Recurrent Neural Network (QRNN) and `cntkx.ops.cumsum`
+The QRNN provides similar accuracy to the LSTM but can be betwen 2 and 17 times faster than the 
+highly optimized NVIDIA cuDNN LSTM implementation depending on the use case.
+
+More details please refer to the original paper [here](https://arxiv.org/abs/1611.01576).
+
+
 ***2018-12-07***
 #### New sequence ops: `cntkx.ops.sequence.pad` and `cntkx.ops.sequence.length`
 Added two new sequence ops. `cntkx.ops.sequence.pad` allows padding on the sequence axis and 

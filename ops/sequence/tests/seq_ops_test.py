@@ -18,7 +18,7 @@ def test_sequence_length():
 
 def test_sequence_pad():
     pattern = (1, 1)
-    input_dim = 1
+    input_dim = 10
     s1 = 5
     s2 = 3
     a = C.sequence.input_variable(input_dim)

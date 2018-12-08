@@ -23,22 +23,26 @@ def pad(x, pattern, mode=C.CONSTANT_PAD, constant_value=0, name=''):
 
     ndim = len(x.shape)
     null_pattern = [(0, 0)] * ndim
+    final_pattern = [pattern] + null_pattern
+
     b = C.sequence.unpack(x, padding_value=0, no_mask_output=True)
-    c = C.pad(b, [pattern] + null_pattern, mode=mode, constant_value=constant_value, name=name)
-    d = C.to_sequence(c, length(x) + C.Constant(sum(pattern)))
+    c = C.pad(b, final_pattern, mode=mode, constant_value=constant_value)
+    seq_length = length(x) + C.Constant(sum(pattern))
+    d = C.to_sequence(c, seq_length, name=name)
     return d
 
 
-@C.Function
-def length(x):
+@C.typemap
+def length(x, name=''):
     """
     Calculates the sequence length of the tensor.
 
     Arguments:
          x: input sequence tensor
+         name (str, optional): the name of the Function instance in the network
     """
 
     def step(acc, a):
         return 1 + acc + a * 0
 
-    return C.sequence.last(Recurrence(step)(x))
+    return C.sequence.last(Recurrence(step)(C.slice(x, 0, 0, 1, name=name)))

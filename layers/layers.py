@@ -1,10 +1,11 @@
 import cntk as C
+import cntkx as Cx
 from cntk.layers import SequentialConvolution, Recurrence
 
 
-def QRNN(filter_shape: int=2, hidden_dim=None, activation=C.tanh, return_full_state=False):
+def QRNN(window: int=1, hidden_dim=None, activation=C.tanh, return_full_state=False):
     """
-    Quasi-Recurrent Neural Networks
+    Quasi-Recurrent Neural Networks layer
 
     This is the CNTK implementation of [Salesforce Research](https://einstein.ai/)'s
     [Quasi-Recurrent Neural Networks](https://arxiv.org/abs/1611.01576) paper.
@@ -25,8 +26,8 @@ def QRNN(filter_shape: int=2, hidden_dim=None, activation=C.tanh, return_full_st
         }
 
     Arguments:
-        filter_shape (int): the size of convolution across the temporal
-          dynamic axis. size 2 reduces down to LSTM implementation.
+        window (`int`):  Defines the size of the convolutional window (how many previous
+          tokens to look when computing the QRNN values). Defaults 1.
         hidden_dim (int): size of hidden dim of h, c and o
         activation: cell activation function
 
@@ -42,8 +43,15 @@ def QRNN(filter_shape: int=2, hidden_dim=None, activation=C.tanh, return_full_st
         return f * c + (1 - f) * z
 
     def model(input_tensor):
-        gate_values = SequentialConvolution(filter_shape=filter_shape, num_filters=3 * hidden_dim, pad=True,
-                                            reduction_rank=1)(input_tensor)
+        filter_shape = (window, ) + input_tensor.shape
+
+        input_sequence = input_tensor
+        if window > 1:
+            # to ensure causal relation is still preserved
+            input_sequence = Cx.sequence.pad(input_sequence, (window - 1, 0), constant_value=0)
+
+        gate_values = SequentialConvolution(filter_shape=filter_shape, num_filters=3 * hidden_dim, pad=False,
+                                            reduction_rank=0)(input_sequence) >> C.squeeze
 
         x = C.slice(gate_values, -1, 0, hidden_dim)
         forget = C.slice(gate_values, -1, hidden_dim, 2 * hidden_dim)

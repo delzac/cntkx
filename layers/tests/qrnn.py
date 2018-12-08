@@ -24,15 +24,15 @@ hidden_dim = 100
 input_tensor = C.sequence.input_variable(input_dim)
 target_tensor = C.input_variable(1)
 
-qrnn = QRNN(hidden_dim=hidden_dim)(input_tensor)
-# rnn = Recurrence(LSTM(hidden_dim))(input_tensor)
-prediction = Dense(1)(C.sequence.last(qrnn))
+# hidden = QRNN(window=2, hidden_dim=hidden_dim)(input_tensor)
+hidden = Recurrence(LSTM(hidden_dim))(input_tensor)
+prediction = Dense(1)(C.sequence.last(hidden))
 
 loss = C.squared_error(prediction, target_tensor)
 sgd_m = C.momentum_sgd(prediction.parameters, 0.01, 0.912)
 trainer = C.Trainer(prediction, (loss,), [sgd_m])
 
-n_epoch = 0
+n_epoch = 50
 minibatch_size = 30
 
 for epoch in range(n_epoch):
@@ -46,7 +46,7 @@ for epoch in range(n_epoch):
 
         print(f"loss: {trainer.previous_minibatch_loss_average}")
 
-# TODO: pad sequence check google
+
 n = np.random.randint(2, size=(6, input_dim)).astype(np.float32)
 print(prediction.eval({input_tensor: [n]}))
 print(n.sum())

@@ -1,5 +1,6 @@
 import cntk as C
 import numpy as np
+from . import sequence
 
 
 ##########################################################################

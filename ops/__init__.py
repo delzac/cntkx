@@ -71,8 +71,7 @@ def sample_gaussian_mdn(prediction_tensor, nmix: int, ndim: int):
     """
     alpha_tensor, mu_tensor, sigma_tensor = gaussian_mdn_coeff(prediction_tensor, nmix=nmix, ndim=ndim)
 
-    alpha_tensor_gumbel = alpha_tensor + C.random.gumbel_like(alpha_tensor)
-    selected_alpha = C.equal(alpha_tensor_gumbel, C.reduce_max(alpha_tensor_gumbel))
+    selected_alpha = C.hardmax(alpha_tensor + C.random.gumbel_like(alpha_tensor))
     selected_mu_tensor = C.reduce_sum(mu_tensor * C.expand_dims(selected_alpha, axis=-1), axis=0)
     selected_sigma_tensor = C.reduce_sum(sigma_tensor * selected_alpha, axis=0)
 

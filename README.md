@@ -1,6 +1,12 @@
 # CNTKx
-Deep learning library that builds on Microsoft [CNTK](https://github.com/Microsoft/CNTK). 
+Deep learning library that builds on and extends Microsoft [CNTK](https://github.com/Microsoft/CNTK). 
 This library is in active development, more models and pre-built components coming soon!
+
+## Installation
+cntk is a dependency to cntkx. Please get a working installation of cntk first. Then:
+
+    pip install cntkx
+
 
 ## News
 ***2018-12-08***

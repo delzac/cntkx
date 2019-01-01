@@ -1,6 +1,7 @@
 import cntk as C
 import cntkx as Cx
-from cntk.layers import SequentialConvolution, Recurrence
+from cntk.layers import SequentialConvolution, Recurrence, Dense, LayerNormalization, ResNetBlock
+from cntkx.ops import scaled_dot_product_attention
 
 
 def QRNN(window: int=1, hidden_dim=None, activation=C.tanh, return_full_state=False):
@@ -71,3 +72,35 @@ def QRNN(window: int=1, hidden_dim=None, activation=C.tanh, return_full_state=Fa
             return h
 
     return model
+
+
+def MultiheadAttention(head_dim, nb_heads, model_dim):
+    assert head_dim * nb_heads == model_dim
+
+    query_linears = [Dense(head_dim) for __ in range(nb_heads)]
+    key_linears = [Dense(head_dim) for __ in range(nb_heads)]
+    value_linears = [Dense(head_dim) for __ in range(nb_heads)]
+    multihead_liner = Dense(model_dim)
+
+    def inner(query, key, value):
+        attention_outputs = [scaled_dot_product_attention(q_linear(query), k_linear(key), v_linear(value))
+                             for q_linear, k_linear, v_linear in zip(query_linears, key_linears, value_linears)]
+
+        result = multihead_liner(C.splice(*attention_outputs))
+        return result
+
+    return inner
+
+
+def transformer_encoder_block(head_dim: int, nb_heads: int, model_dim: int):
+    attention_layer = MultiheadAttention(head_dim, nb_heads, model_dim)
+    layernorm_attention = LayerNormalization()
+    feed_foward = Dense(model_dim)
+    layernorm_feed_foward = LayerNormalization()
+
+    def encoder(q, k, v):
+        attentionlayer_output = layernorm_attention(ResNetBlock(attention_layer)(q, k, v))
+        output = layernorm_feed_foward(ResNetBlock(feed_foward)(attentionlayer_output))
+        return output
+
+    return encoder

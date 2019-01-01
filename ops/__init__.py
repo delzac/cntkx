@@ -29,6 +29,39 @@ def cumsum(x, axis: int=-1):
 
 
 ##########################################################################
+# non linear ops
+##########################################################################
+def scaled_dot_product_attention(query, key, value):
+    """ attention(Q, K, V) = softmax(QV.T / sqrt(dk)) V; consider masking next time
+
+    An attention function can be described as mapping a query and a set of key-value pairs to an output,
+    where the query, keys, values, and output are all vectors. The output is computed as a weighted sum
+    of the values, where the weight assigned to each value is computed by a compatibility function of the
+    query with the corresponding key.
+
+    Softmax of Q and K means that context is either of them. The shape of softmax output should be same as context.
+
+    Softmax generates weights.
+    Query is NOT the unchanging context that is attented ON.
+    Key is the context. Key is being attended ON
+    Values get weighted by output of softmax.
+
+    Key and value are frequently the same.
+
+    Final outputs is a weighted sum of values.
+
+    Query and Key is definitely of different rank. Is same rank, only a scalar will be output. How to softmax?
+    Query shold have higher rank than key. NOOOOO, seems like key should have higher rank from colah blog.
+
+    Dealing with translation, both query and key are rank 2. (seq_length, embedding_dim)
+    Query is not rank 2 what, its just a vector. Key is rank 2 (e.g. embeddings)
+
+    """
+    dk = sum(i for i in key.shape if i > 0)
+    return C.times(C.softmax(C.times_transpose(query, key) / dk), value)
+
+
+##########################################################################
 # mixture density network ops
 ##########################################################################
 

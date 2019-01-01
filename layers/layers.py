@@ -92,7 +92,7 @@ def MultiheadAttention(head_dim, nb_heads, model_dim):
     return inner
 
 
-def transformer_encoder_block(head_dim: int, nb_heads: int, model_dim: int):
+def TransformerEncoderBLock(head_dim: int, nb_heads: int, model_dim: int):
     attention_layer = MultiheadAttention(head_dim, nb_heads, model_dim)
     layernorm_attention = LayerNormalization()
     feed_foward = Dense(model_dim)

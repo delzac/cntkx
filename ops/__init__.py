@@ -33,30 +33,17 @@ def cumsum(x, axis: int=-1):
 ##########################################################################
 def scaled_dot_product_attention(query, key, value, valid_mask_value=None, obey_sequence_order: bool = None,
                                  max_seq_len: int = None, output_as_seq: bool = False):
-    """ attention(Q, K, V) = softmax(QV.T / sqrt(dk)) V; consider masking next time
+    """
+    Scaled dot-product attention implementation of "Attention is all you need", https://arxiv.org/abs/1706.03762
 
     An attention function can be described as mapping a query and a set of key-value pairs to an output,
     where the query, keys, values, and output are all vectors. The output is computed as a weighted sum
     of the values, where the weight assigned to each value is computed by a compatibility function of the
     query with the corresponding key.
 
-    Softmax of Q and K means that context is either of them. The shape of softmax output should be same as context.
+    attention(Q, K, V) = softmax(QV.T / sqrt(dk)) * V
 
-    Softmax generates weights.
-    Query is NOT the unchanging context that is attented ON.
-    Key is the context. Key is being attended ON
-    Values get weighted by output of softmax.
-
-    Key and value are frequently the same.
-
-    Final outputs is a weighted sum of values.
-
-    Query and Key is definitely of different rank. Is same rank, only a scalar will be output. How to softmax?
-    Query shold have higher rank than key. NOOOOO, seems like key should have higher rank from colah blog.
-
-    Dealing with translation, both query and key are rank 2. (seq_length, embedding_dim)
-    Query is not rank 2 what, its just a vector. Key is rank 2 (e.g. embeddings)
-
+    When query, key and value are all the same, it becomes self-attention.
 
     Arguments:
         query: input tensor of rank 2 or a sequence of rank 1 tensor (i.e. vector)
@@ -68,7 +55,7 @@ def scaled_dot_product_attention(query, key, value, valid_mask_value=None, obey_
         output_as_seq: output attended tensor as a sequence
 
     Returns:
-        :class:`~cntk.ops.functions.Function`
+        :class:`~cntk.ops.functions.Function`: weighted sum of value
 
     """
     dyanmic_seq_axis_present = any(ax.is_sequence_axis for ax in value.dynamic_axes)

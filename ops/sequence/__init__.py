@@ -25,9 +25,9 @@ def pad(x, pattern, mode=C.CONSTANT_PAD, constant_value=0, name=''):
     null_pattern = [(0, 0)] * ndim
     final_pattern = [pattern] + null_pattern
 
-    b = C.sequence.unpack(x, padding_value=0, no_mask_output=True)
+    b, valid = C.sequence.unpack(x, padding_value=0).outputs
     c = C.pad(b, final_pattern, mode=mode, constant_value=constant_value)
-    seq_length = length(x) + C.Constant(sum(pattern))
+    seq_length = C.reduce_sum(valid) + C.Constant(sum(pattern))
     d = C.to_sequence(c, seq_length, name=name)
     return d
 

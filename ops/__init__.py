@@ -31,8 +31,9 @@ def cumsum(x, axis: int=-1):
 ##########################################################################
 # non linear ops
 ##########################################################################
+@C.typemap
 def scaled_dot_product_attention(query, key, value, valid_mask_value=None, obey_sequence_order: bool = None,
-                                 max_seq_len: int = None, output_as_seq: bool = False):
+                                 max_seq_len: int = None, output_as_seq: bool = False, return_valid_mask: bool = False):
     """
     Scaled dot-product attention implementation of "Attention is all you need", https://arxiv.org/abs/1706.03762
 
@@ -53,6 +54,7 @@ def scaled_dot_product_attention(query, key, value, valid_mask_value=None, obey_
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
         output_as_seq: output attended tensor as a sequence
+        return_valid_mask (bool): if to return valid_mask_value
 
     Returns:
         :class:`~cntk.ops.functions.Function`: weighted sum of value
@@ -95,6 +97,9 @@ def scaled_dot_product_attention(query, key, value, valid_mask_value=None, obey_
         attended = C.element_select(C.expand_dims(valid_mask_value, -1), attended, C.Constant(0))
     else:
         raise ValueError(f"This should not happen output_as_seq={output_as_seq}")
+
+    if return_valid_mask:
+        return attended, valid_mask_value
 
     return attended
 

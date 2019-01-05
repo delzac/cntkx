@@ -74,35 +74,35 @@ def QRNN(window: int=1, hidden_dim=None, activation=C.tanh, return_full_state=Fa
     return model
 
 
-def MultiheadAttention(head_dim, nb_heads, model_dim, valid_mask_value=None, obey_sequence_order: bool = None,
-                       max_seq_len: int = None, output_as_seq: bool = False, return_valid_mask: bool = False):
+def MultiheadAttention(nb_heads, model_dim, map_rank=None, obey_sequence_order: bool = None,
+                       max_seq_len: int = None, output_as_seq: bool = False):
     """ Multi head attention as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
 
     Arguments:
-        head_dim (int):
-        nb_heads (int):
-        model_dim (int):
-        valid_mask_value: a tensor with values 1 or 0 of shape (seq_len, ). Used to select out sequences that had been padded.
+        nb_heads (int): number of attention heads
+        model_dim (int): number of hidden dim in final output of multi-head attention
+        map_rank (int, None): If input is an unpacked sequence tensor set as 1. Default None.
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
         output_as_seq: output attended tensor as a sequence
-        return_valid_mask (bool): if to return valid_mask_value
 
     Returns:
-        :class:`~cntk.ops.functions.Function`: weighted sum of value
+        :class:`~cntk.ops.functions.Function`:
 
     """
-    assert head_dim * nb_heads == model_dim
+    assert model_dim % nb_heads == 0, "Model dimension must be divisible by number of heads"
 
-    query_linears = [Dense(head_dim) for __ in range(nb_heads)]
-    key_linears = [Dense(head_dim) for __ in range(nb_heads)]
-    value_linears = [Dense(head_dim) for __ in range(nb_heads)]
-    multihead_liner = Dense(model_dim)
+    head_dim = int(model_dim / nb_heads)
+    query_linears = [Dense(head_dim, map_rank=map_rank) for __ in range(nb_heads)]
+    key_linears = [Dense(head_dim, map_rank=map_rank) for __ in range(nb_heads)]
+    value_linears = [Dense(head_dim, map_rank=map_rank) for __ in range(nb_heads)]
+    multihead_liner = Dense(model_dim, map_rank=0 if output_as_seq else 1)
 
-    def inner(query, key, value):
+    def inner(query, key, value, dynamic_axes_like=None):
+        # list of nb_heads heads with shape (-3, head_dim) each
         attention_outputs = [scaled_dot_product_attention(q_linear(query), k_linear(key), v_linear(value),
-                                                          valid_mask_value, obey_sequence_order, max_seq_len,
-                                                          output_as_seq, return_valid_mask)
+                                                          dynamic_axes_like, obey_sequence_order, max_seq_len,
+                                                          output_as_seq)
                              for q_linear, k_linear, v_linear in zip(query_linears, key_linears, value_linears)]
 
         result = multihead_liner(C.splice(*attention_outputs))

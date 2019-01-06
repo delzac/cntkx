@@ -111,18 +111,89 @@ def MultiheadAttention(nb_heads, model_dim, map_rank=None, obey_sequence_order: 
     return inner
 
 
-def TransformerEncoderBlock(head_dim: int, nb_heads: int, model_dim: int):
-    attention_layer = MultiheadAttention(head_dim, nb_heads, model_dim)
+def TransformerEncoderBlock(nb_heads: int, model_dim: int, map_rank=None,
+                            obey_sequence_order: bool = None, max_seq_len: int = None, output_as_seq: bool = False):
+    """ Encoder block of transformer as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
+
+    Arguments:
+        nb_heads (int): number of attention heads
+        model_dim (int): number of hidden dim in final output of multi-head attention
+        map_rank (int, None): If input is an unpacked sequence tensor set as 1. Default None.
+        obey_sequence_order: do not let attention peek into future values
+        max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
+        output_as_seq: output attended tensor as a sequence
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
+    attention_layer = MultiheadAttention(nb_heads, model_dim, map_rank, obey_sequence_order, max_seq_len, output_as_seq)
     layernorm_attention = LayerNormalization()
-    feed_foward = Dense(model_dim)
+    feed_foward = Dense(model_dim, map_rank=0 if output_as_seq else 1)
     layernorm_feed_foward = LayerNormalization()
 
-    def encoder(q, k, v):
-        attentionlayer_output = layernorm_attention(ResNetBlock(attention_layer)(q, k, v))
-        output = layernorm_feed_foward(ResNetBlock(feed_foward)(attentionlayer_output))
+    def encoder(q, k, v, dynamic_axes_like=None):
+        dynamic_seq_axis_present = any(ax.is_sequence_axis for ax in v.dynamic_axes)
+
+        if dynamic_seq_axis_present and output_as_seq:
+            skip_connecet_input = v
+        elif dynamic_seq_axis_present and not output_as_seq:
+            skip_connecet_input = C.sequence.unpack(v, padding_value=0, no_mask_output=True)
+        elif not dynamic_seq_axis_present and output_as_seq:
+            skip_connecet_input = C.to_sequence_like(v, dynamic_axes_like)
+        elif not dynamic_seq_axis_present and not output_as_seq:
+            skip_connecet_input = v
+
+        attended = attention_layer(q, k, v, dynamic_axes_like)
+        skip_connect_attended = attended + skip_connecet_input
+        normed_skip_connect_attended = layernorm_attention(skip_connect_attended)
+        output = layernorm_feed_foward(ResNetBlock(feed_foward)(normed_skip_connect_attended))
         return output
 
     return encoder
+
+
+def TransformerEncoder(n: int, nb_heads: int, model_dim: int, obey_sequence_order: bool = None,
+                       max_seq_len: int = None, output_as_seq: bool = False):
+    """ Transformer encoder as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
+
+    Arguments:
+        n (int): number of encoder blocks
+        nb_heads (int): number of attention heads
+        model_dim (int): number of hidden dim in final output of multi-head attention
+        obey_sequence_order: do not let attention peek into future values
+        max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
+        output_as_seq: output attended tensor as a sequence
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
+
+    if n >= 2:
+        first = [TransformerEncoderBlock(nb_heads, model_dim, None, obey_sequence_order, max_seq_len, False)]
+        last = [TransformerEncoderBlock(nb_heads, model_dim, 1, obey_sequence_order, max_seq_len, output_as_seq)]
+        mid = [TransformerEncoderBlock(nb_heads, model_dim, 1, obey_sequence_order, max_seq_len, False)
+               for __ in range(n - 2)]
+
+        blocks = first + mid + last if mid else first + last
+
+    elif n == 1:
+        blocks = [TransformerEncoderBlock(nb_heads, model_dim, None, obey_sequence_order, max_seq_len, output_as_seq)]
+    else:
+        raise ValueError(f"n ({n}) must be larger than 0")
+
+    def inner(x):
+
+        seq = x
+        x = blocks.pop(0)(x, x, x, None)
+
+        for block in blocks:
+            x = block(x, x, x, seq)
+
+        return x
+
+    return inner
 
 
 def TransformerDecoderBlock():

@@ -1,5 +1,5 @@
 import cntk as C
-from cntkx.layers import QRNN, MultiheadAttention
+from cntkx.layers import QRNN, MultiheadAttention, TransformerEncoderBlock, TransformerEncoder
 import numpy as np
 import pytest
 
@@ -104,3 +104,149 @@ def test_multi_head_attention3():
     n = np.random.random((2, 11, 5)).astype(np.float32)
     with pytest.raises(Exception):
         attended.eval({a: n})
+
+
+def test_transformer_encoder_block1a():
+    """ Default settings: input is seq output is not seq """
+    a = C.sequence.input_variable(10)
+    encoder_block = TransformerEncoderBlock(2, 10)
+    attended = encoder_block(a, a, a, None)
+
+    assert attended.shape == (-3, 10)
+
+    n = [np.random.random((3, 10)).astype(np.float32),
+         np.random.random((6, 10)).astype(np.float32)]
+
+    results = attended.eval({a: n})
+
+
+def test_transformer_encoder_block1b():
+    """ Default settings: input is seq output is seq """
+    a = C.sequence.input_variable(10)
+    encoder_block = TransformerEncoderBlock(2, 10, output_as_seq=True)
+    attended = encoder_block(a, a, a, None)
+
+    assert attended.shape == (10,)
+
+    n = [np.random.random((3, 10)).astype(np.float32),
+         np.random.random((6, 10)).astype(np.float32)]
+
+    results = attended.eval({a: n})
+
+
+def test_transformer_encoder_block1c():
+    """ Default settings: input is not seq output is not seq """
+    a = C.input_variable((-3, 10))
+    encoder_block = TransformerEncoderBlock(2, 10, map_rank=1)
+    attended = encoder_block(a, a, a, None)
+
+    assert attended.shape == (-3, 10)
+
+    n = np.random.random((2, 6, 10)).astype(np.float32)
+    results = attended.eval({a: n})
+
+
+def test_transformer_encoder_block1d():
+    """ Default settings: input is not seq output is seq """
+    a = C.input_variable((-3, 10))
+    b = C.sequence.input_variable(10)
+    encoder_block = TransformerEncoderBlock(2, 10, map_rank=1, output_as_seq=True)
+    attended = encoder_block(a, a, a, b)
+
+    assert attended.shape == (10,)
+
+    n = np.random.random((2, 6, 10)).astype(np.float32)
+    m = [np.random.random((3, 10)).astype(np.float32),
+         np.random.random((6, 10)).astype(np.float32)]
+
+    results = attended.eval({a: n, b: m})
+
+
+def test_transformer_encoder1a():
+    """ Default settings: input is not seq output is seq """
+    a = C.sequence.input_variable(10)
+    encoder = TransformerEncoder(5, 2, 10)
+    encoded = encoder(a)
+
+    assert encoded.shape == (-3, 10)
+
+    n = [np.random.random((2, 10)).astype(np.float32),
+         np.random.random((4, 10)).astype(np.float32),
+         np.random.random((6, 10)).astype(np.float32),
+         np.random.random((8, 10)).astype(np.float32)]
+
+    results = encoded.eval({a: n})
+
+    encoder = TransformerEncoder(2, 2, 10)
+    encoded = encoder(a)
+
+    assert encoded.shape == (-3, 10)
+
+    results = encoded.eval({a: n})
+
+    encoder = TransformerEncoder(1, 2, 10)
+    encoded = encoder(a)
+
+    assert encoded.shape == (-3, 10)
+
+    results = encoded.eval({a: n})
+
+
+def test_transformer_encoder1b():
+    """ Default settings: input is not seq output is seq """
+    a = C.sequence.input_variable(10)
+    encoder = TransformerEncoder(5, 2, 10, output_as_seq=True)
+    encoded = encoder(a)
+
+    assert encoded.shape == (10, )
+
+    n = [np.random.random((2, 10)).astype(np.float32),
+         np.random.random((4, 10)).astype(np.float32),
+         np.random.random((6, 10)).astype(np.float32),
+         np.random.random((8, 10)).astype(np.float32)]
+
+    results = encoded.eval({a: n})
+
+    encoder = TransformerEncoder(2, 2, 10, output_as_seq=True)
+    encoded = encoder(a)
+
+    assert encoded.shape == (10, )
+
+    results = encoded.eval({a: n})
+
+    encoder = TransformerEncoder(1, 2, 10, output_as_seq=True)
+    encoded = encoder(a)
+
+    assert encoded.shape == (10, )
+
+    results = encoded.eval({a: n})
+
+
+def test_transformer_encoder1c():
+    """ Default settings: input is not seq output is seq """
+    a = C.sequence.input_variable(10)
+    encoder = TransformerEncoder(5, 2, 10, obey_sequence_order=True, max_seq_len=100, output_as_seq=True)
+    encoded = encoder(a)
+
+    assert encoded.shape == (10, )
+
+    n = [np.random.random((2, 10)).astype(np.float32),
+         np.random.random((4, 10)).astype(np.float32),
+         np.random.random((6, 10)).astype(np.float32),
+         np.random.random((8, 10)).astype(np.float32)]
+
+    results = encoded.eval({a: n})
+
+    encoder = TransformerEncoder(2, 2, 10, obey_sequence_order=True, max_seq_len=100, output_as_seq=True)
+    encoded = encoder(a)
+
+    assert encoded.shape == (10, )
+
+    results = encoded.eval({a: n})
+
+    encoder = TransformerEncoder(1, 2, 10, obey_sequence_order=True, max_seq_len=100, output_as_seq=True)
+    encoded = encoder(a)
+
+    assert encoded.shape == (10, )
+
+    results = encoded.eval({a: n})

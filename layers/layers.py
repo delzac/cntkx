@@ -143,6 +143,8 @@ def TransformerEncoderBlock(nb_heads: int, model_dim: int, map_rank=None,
             skip_connecet_input = C.to_sequence_like(v, dynamic_axes_like)
         elif not dynamic_seq_axis_present and not output_as_seq:
             skip_connecet_input = v
+        else:
+            raise ValueError("This branch should not be reachable")
 
         attended = attention_layer(q, k, v, dynamic_axes_like)
         skip_connect_attended = attended + skip_connecet_input

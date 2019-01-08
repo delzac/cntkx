@@ -29,8 +29,8 @@ def test_qrnn1():
 def test_multi_head_attention1():
     """ default settings: output as unpacked sequence tensor """
     a = C.sequence.input_variable(5)
-    multihead1 = MultiheadAttention(nb_heads=6, model_dim=30)
-    multihead2 = MultiheadAttention(nb_heads=6, model_dim=60, map_ranks=1)
+    multihead1 = MultiheadAttention(num_heads=6, model_dim=30)
+    multihead2 = MultiheadAttention(num_heads=6, model_dim=60, map_ranks=1)
 
     attended = multihead1(a, a, a)
     assert attended.shape == (-3, 30)
@@ -54,8 +54,8 @@ def test_multi_head_attention1():
 def test_multi_head_attention1a():
     """ default settings: output as unpacked sequence tensor """
     a = C.sequence.input_variable(5)
-    multihead1 = MultiheadAttention(nb_heads=6, model_dim=30)
-    multihead2 = MultiheadAttention(nb_heads=6, model_dim=60, map_ranks=1)
+    multihead1 = MultiheadAttention(num_heads=6, model_dim=30)
+    multihead2 = MultiheadAttention(num_heads=6, model_dim=60, map_ranks=1)
 
     attended = multihead1(a, a, a)
     assert attended.shape == (-3, 30)
@@ -76,8 +76,8 @@ def test_multi_head_attention1a():
 def test_multi_head_attention2():
     """ default settings: output as sequence tensor """
     a = C.sequence.input_variable(5)
-    multihead1 = MultiheadAttention(nb_heads=6, model_dim=30, output_as_seq=True)
-    multihead2 = MultiheadAttention(nb_heads=6, model_dim=60, output_as_seq=True)
+    multihead1 = MultiheadAttention(num_heads=6, model_dim=30, output_as_seq=True)
+    multihead2 = MultiheadAttention(num_heads=6, model_dim=60, output_as_seq=True)
 
     attended = multihead1(a, a, a)
     assert attended.shape == (30,)
@@ -93,7 +93,7 @@ def test_multi_head_attention2():
 def test_multi_head_attention3():
     """ default settings: output as sequence tensor with no peeking into future values """
     a = C.sequence.input_variable(5)
-    multihead1 = MultiheadAttention(nb_heads=6, model_dim=30, obey_sequence_order=True,
+    multihead1 = MultiheadAttention(num_heads=6, model_dim=30, obey_sequence_order=True,
                                     max_seq_len=10, output_as_seq=True)
 
     attended = multihead1(a, a, a)
@@ -110,7 +110,7 @@ def test_multi_head_attention3():
 def test_multi_head_attention_block1a():
     """ default settings: output as unpacked sequence tensor """
     a = C.sequence.input_variable(10)
-    multihead1 = MultiHeadAttentionBlock(nb_heads=2, model_dim=10)
+    multihead1 = MultiHeadAttentionBlock(num_heads=2, model_dim=10)
 
     attended = multihead1(a, a, a, None)
     assert attended.shape == (-3, 10)
@@ -125,7 +125,7 @@ def test_multi_head_attention_block1a():
 def test_multi_head_attention_block1b():
     """ default settings: output as unpacked sequence tensor """
     a = C.sequence.input_variable(10)
-    multihead1 = MultiHeadAttentionBlock(nb_heads=2, model_dim=10, output_as_seq=True)
+    multihead1 = MultiHeadAttentionBlock(num_heads=2, model_dim=10, output_as_seq=True)
 
     attended = multihead1(a, a, a, None)
     assert attended.shape == (10, )
@@ -142,7 +142,7 @@ def test_multi_head_attention_block1c():
     a = C.input_variable((-3, 10))
     b = C.sequence.input_variable(10)
 
-    multihead1 = MultiHeadAttentionBlock(nb_heads=2, model_dim=10, map_ranks=1)
+    multihead1 = MultiHeadAttentionBlock(num_heads=2, model_dim=10, map_ranks=1)
 
     attended = multihead1(a, a, a, b)
     assert attended.shape == (-3, 10)
@@ -219,8 +219,8 @@ def test_transformer_decoder_block1():
     a = C.sequence.input_variable(10)
     b = C.sequence.input_variable(10)
 
-    encoder_block = TransformerEncoderBlock(nb_heads=2, model_dim=10)
-    decoder_block = TransformerDecoderBlock(nb_heads=2, model_dim=10, is_encoded_seq=False, map_rank=None)
+    encoder_block = TransformerEncoderBlock(num_heads=2, model_dim=10)
+    decoder_block = TransformerDecoderBlock(num_heads=2, model_dim=10, is_encoded_seq=False, map_rank=None)
 
     encoded = encoder_block(a)
     decoded = decoder_block(encoded, b, None)
@@ -242,8 +242,8 @@ def test_transformer_decoder_block2():
     a = C.sequence.input_variable(10)
     b = C.sequence.input_variable(10)
 
-    encoder_block = TransformerEncoderBlock(nb_heads=2, model_dim=10, output_as_seq=True)
-    decoder_block = TransformerDecoderBlock(nb_heads=2, model_dim=10, is_encoded_seq=True, map_rank=None)
+    encoder_block = TransformerEncoderBlock(num_heads=2, model_dim=10, output_as_seq=True)
+    decoder_block = TransformerDecoderBlock(num_heads=2, model_dim=10, is_encoded_seq=True, map_rank=None)
 
     encoded = encoder_block(a)
     decoded = decoder_block(encoded, b, None)
@@ -265,8 +265,8 @@ def test_transformer_decoder_block2a():
     a = C.sequence.input_variable(10)
     b = C.sequence.input_variable(10)
 
-    encoder_block = TransformerEncoderBlock(nb_heads=2, model_dim=10, output_as_seq=True)
-    decoder_block = TransformerDecoderBlock(nb_heads=2, model_dim=10, is_encoded_seq=False, map_rank=None)
+    encoder_block = TransformerEncoderBlock(num_heads=2, model_dim=10, output_as_seq=True)
+    decoder_block = TransformerDecoderBlock(num_heads=2, model_dim=10, is_encoded_seq=False, map_rank=None)
 
     encoded = encoder_block(a)
     with pytest.raises(Exception):
@@ -278,9 +278,9 @@ def test_transformer_decoder_block3():
     a = C.sequence.input_variable(10)
     b = C.sequence.input_variable(10)
 
-    encoder_block = TransformerEncoderBlock(nb_heads=2, model_dim=10)
-    decoder_block1 = TransformerDecoderBlock(nb_heads=2, model_dim=10, is_encoded_seq=False, map_rank=None)
-    decoder_block2 = TransformerDecoderBlock(nb_heads=2, model_dim=10, is_encoded_seq=False, map_rank=1)
+    encoder_block = TransformerEncoderBlock(num_heads=2, model_dim=10)
+    decoder_block1 = TransformerDecoderBlock(num_heads=2, model_dim=10, is_encoded_seq=False, map_rank=None)
+    decoder_block2 = TransformerDecoderBlock(num_heads=2, model_dim=10, is_encoded_seq=False, map_rank=1)
 
     encoded = encoder_block(a)
     decoded = decoder_block1(encoded, b, None)
@@ -519,7 +519,7 @@ def test_transformer():
     a = C.sequence.input_variable(10)
     b = C.sequence.input_variable(10)
 
-    transformer = Transformer(num_encoder_blocks=3, num_decoder_blocks=3, nb_heads_encoder=2, nb_heads_decoder=2,
+    transformer = Transformer(num_encoder_blocks=3, num_decoder_blocks=3, num_heads_encoder=2, num_heads_decoder=2,
                               model_dim=10, encoder_obey_sequence_order=False, decoder_obey_sequence_order=True,
                               max_seq_len_encoder=100, max_seq_len_decoder=100, output_as_seq=True)
 
@@ -532,21 +532,21 @@ def test_transformer():
 
     results = prediction.eval({a: n, b: n})
 
-    transformer = Transformer(num_encoder_blocks=1, num_decoder_blocks=1, nb_heads_encoder=2, nb_heads_decoder=2,
+    transformer = Transformer(num_encoder_blocks=1, num_decoder_blocks=1, num_heads_encoder=2, num_heads_decoder=2,
                               model_dim=10, encoder_obey_sequence_order=False, decoder_obey_sequence_order=True,
                               max_seq_len_encoder=100, max_seq_len_decoder=100, output_as_seq=True)
 
     prediction = transformer(a, b)
     results = prediction.eval({a: n, b: n})
 
-    transformer = Transformer(num_encoder_blocks=1, num_decoder_blocks=2, nb_heads_encoder=2, nb_heads_decoder=2,
+    transformer = Transformer(num_encoder_blocks=1, num_decoder_blocks=2, num_heads_encoder=2, num_heads_decoder=2,
                               model_dim=10, encoder_obey_sequence_order=False, decoder_obey_sequence_order=True,
                               max_seq_len_encoder=100, max_seq_len_decoder=100, output_as_seq=True)
 
     prediction = transformer(a, b)
     results = prediction.eval({a: n, b: n})
 
-    transformer = Transformer(num_encoder_blocks=2, num_decoder_blocks=1, nb_heads_encoder=2, nb_heads_decoder=2,
+    transformer = Transformer(num_encoder_blocks=2, num_decoder_blocks=1, num_heads_encoder=2, num_heads_decoder=2,
                               model_dim=10, encoder_obey_sequence_order=False, decoder_obey_sequence_order=True,
                               max_seq_len_encoder=100, max_seq_len_decoder=100, output_as_seq=True)
 

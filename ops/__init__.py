@@ -46,6 +46,12 @@ def scaled_dot_product_attention(query, key, value, dynamic_axes_like=None, obey
 
     When query, key and value are all the same, it becomes self-attention.
 
+    Example:
+        a = C.sequence.input_variable(10)
+        b = scaled_dot_product_attention(a, a, a)
+
+        assert b.shape == (-3, 10)
+
     Arguments:
         query: input tensor of rank 2 or a sequence of rank 1 tensor (i.e. vector)
         key: input tensor of rank 2 or a sequence of rank 1 tensor (i.e. vector)

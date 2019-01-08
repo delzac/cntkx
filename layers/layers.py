@@ -74,14 +74,15 @@ def QRNN(window: int=1, hidden_dim=None, activation=C.tanh, return_full_state=Fa
     return model
 
 
-def MultiheadAttention(nb_heads, model_dim, map_rank=None, obey_sequence_order: bool = None,
+def MultiheadAttention(nb_heads, model_dim, map_ranks: tuple = None, obey_sequence_order: bool = None,
                        max_seq_len: int = None, output_as_seq: bool = False):
     """ Multi head attention as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
 
     Arguments:
         nb_heads (int): number of attention heads
         model_dim (int): number of hidden dim in final output of multi-head attention
-        map_rank (int, None): If input is an unpacked sequence tensor set as 1. Default None.
+        map_ranks (tuple): first item is for query/key. Second is value. set 1 if input tensor
+          is an unpacked sequence, None if it is a sequence. Default None.
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
         output_as_seq: output attended tensor as a sequence
@@ -91,11 +92,14 @@ def MultiheadAttention(nb_heads, model_dim, map_rank=None, obey_sequence_order: 
 
     """
     assert model_dim % nb_heads == 0, "Model dimension must be divisible by number of heads"
+    map_rank = (map_ranks, map_ranks) if not isinstance(map_ranks, tuple) else map_ranks
+    map_rank_query_key = map_rank[0]
+    map_rank_value = map_rank[1]
 
     head_dim = int(model_dim / nb_heads)
-    query_linears = [Dense(head_dim, map_rank=map_rank) for __ in range(nb_heads)]
-    key_linears = [Dense(head_dim, map_rank=map_rank) for __ in range(nb_heads)]
-    value_linears = [Dense(head_dim, map_rank=map_rank) for __ in range(nb_heads)]
+    query_linears = [Dense(head_dim, map_rank=map_rank_query_key) for __ in range(nb_heads)]
+    key_linears = [Dense(head_dim, map_rank=map_rank_query_key) for __ in range(nb_heads)]
+    value_linears = [Dense(head_dim, map_rank=map_rank_value) for __ in range(nb_heads)]
     multihead_liner = Dense(model_dim, map_rank=0 if output_as_seq else 1)
 
     def inner(query, key, value, dynamic_axes_like=None):
@@ -111,14 +115,15 @@ def MultiheadAttention(nb_heads, model_dim, map_rank=None, obey_sequence_order: 
     return inner
 
 
-def TransformerEncoderBlock(nb_heads: int, model_dim: int, map_rank=None,
-                            obey_sequence_order: bool = None, max_seq_len: int = None, output_as_seq: bool = False):
-    """ Encoder block of transformer as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
+def MultiHeadAttentionBlock(nb_heads, model_dim, map_ranks: tuple = None, obey_sequence_order: bool = None,
+                            max_seq_len: int = None, output_as_seq: bool = False):
+    """ Multi head attention block as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
 
     Arguments:
         nb_heads (int): number of attention heads
         model_dim (int): number of hidden dim in final output of multi-head attention
-        map_rank (int, None): If input is an unpacked sequence tensor set as 1. Default None.
+        map_ranks (tuple): first item is for query/key. Second is value. set 1 if input tensor
+          is an unpacked sequence, None if it is a sequence. Default None.
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
         output_as_seq: output attended tensor as a sequence
@@ -127,32 +132,97 @@ def TransformerEncoderBlock(nb_heads: int, model_dim: int, map_rank=None,
         :class:`~cntk.ops.functions.Function`:
 
     """
-    attention_layer = MultiheadAttention(nb_heads, model_dim, map_rank, obey_sequence_order, max_seq_len, output_as_seq)
-    layernorm_attention = LayerNormalization()
-    feed_foward = Dense(model_dim, map_rank=0 if output_as_seq else 1)
-    layernorm_feed_foward = LayerNormalization()
+    attention_layer = MultiheadAttention(nb_heads, model_dim, map_ranks, obey_sequence_order, max_seq_len, output_as_seq)
+    layernorm = LayerNormalization()
 
-    def encoder(q, k, v, dynamic_axes_like=None):
-        dynamic_seq_axis_present = any(ax.is_sequence_axis for ax in v.dynamic_axes)
+    def block(query, key, value, dynamic_axes_like=None):
+        dynamic_seq_axis_present = any(ax.is_sequence_axis for ax in value.dynamic_axes)
 
         if dynamic_seq_axis_present and output_as_seq:
-            skip_connecet_input = v
+            skip_connecet_input = value
         elif dynamic_seq_axis_present and not output_as_seq:
-            skip_connecet_input = C.sequence.unpack(v, padding_value=0, no_mask_output=True)
+            skip_connecet_input = C.sequence.unpack(value, padding_value=0, no_mask_output=True)
         elif not dynamic_seq_axis_present and output_as_seq:
-            skip_connecet_input = C.to_sequence_like(v, dynamic_axes_like)
+            skip_connecet_input = C.to_sequence_like(value, dynamic_axes_like)
         elif not dynamic_seq_axis_present and not output_as_seq:
-            skip_connecet_input = v
+            skip_connecet_input = value
         else:
             raise ValueError("This branch should not be reachable")
 
-        attended = attention_layer(q, k, v, dynamic_axes_like)
+        attended = attention_layer(query, key, value, dynamic_axes_like)
         skip_connect_attended = attended + skip_connecet_input
-        normed_skip_connect_attended = layernorm_attention(skip_connect_attended)
-        output = layernorm_feed_foward(ResNetBlock(feed_foward)(normed_skip_connect_attended))
+        normed_skip_connect_attended = layernorm(skip_connect_attended)
+        return normed_skip_connect_attended
+
+    return block
+
+
+def TransformerEncoderBlock(nb_heads: int, model_dim: int, map_rank=None,
+                            obey_sequence_order: bool = None, max_seq_len: int = None, output_as_seq: bool = False):
+    """ Encoder block of transformer as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
+
+    Arguments:
+        nb_heads (int): number of attention heads
+        model_dim (int): number of hidden dim in final output of multi-head attention
+        map_rank: 1 if input_tensor is an unpacked sequence, None if sequence. Default None.
+        obey_sequence_order: do not let attention peek into future values
+        max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
+        output_as_seq: output attended tensor as a sequence
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
+    mha_block = MultiHeadAttentionBlock(nb_heads, model_dim, map_rank, obey_sequence_order, max_seq_len, output_as_seq)
+    feed_foward = Dense(model_dim, map_rank=0 if output_as_seq else 1)
+    layernorm = LayerNormalization()
+
+    def block(x, dynamic_axes_like=None):
+        inner = mha_block(x, x, x, dynamic_axes_like)
+        output = layernorm(ResNetBlock(feed_foward)(inner))
         return output
 
-    return encoder
+    return block
+
+
+def TransformerDecoderBlock(nb_heads: int, model_dim: int, is_encoded_seq: bool, map_rank=None,
+                            obey_sequence_order: bool = None, max_seq_len: int = None, output_as_seq: bool = False):
+    """ Decoder block of transformer as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
+
+    Arguments:
+        nb_heads (int): number of attention heads
+        model_dim (int): number of hidden dim in final output of multi-head attention
+        is_encoded_seq (bool): is encoded tensor a sequence
+        map_rank: '1' if input tensor x is an unpacked sequence, 'None' if sequence. Default None.
+        obey_sequence_order: do not let attention peek into future values
+        max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
+        output_as_seq: output attended tensor as a sequence
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
+    encoded_map_rank = (None if is_encoded_seq else 1, 1)
+    mha_block1 = MultiHeadAttentionBlock(nb_heads, model_dim, map_rank, obey_sequence_order, max_seq_len, output_as_seq=False)
+    mha_block2 = MultiHeadAttentionBlock(nb_heads, model_dim, encoded_map_rank, obey_sequence_order, max_seq_len, output_as_seq)
+
+    feed_foward = Dense(model_dim, map_rank=0 if output_as_seq else 1)
+    layernorm_feed_foward = LayerNormalization()
+
+    def block(encoded, x, dynamic_axes_like=None):
+        dynamic_seq_axis_present = any(ax.is_sequence_axis for ax in x.dynamic_axes)
+
+        # mha_block1 will always output as unpacked sequence tensor
+        dynamic_axes_like2 = dynamic_axes_like
+        if dynamic_axes_like is None and dynamic_seq_axis_present:
+            dynamic_axes_like2 = x
+
+        inner = mha_block1(x, x, x, dynamic_axes_like)
+        inner = mha_block2(encoded, encoded, inner, dynamic_axes_like2)
+        output = layernorm_feed_foward(ResNetBlock(feed_foward)(inner))
+        return output
+
+    return block
 
 
 def TransformerEncoder(n: int, nb_heads: int, model_dim: int, obey_sequence_order: bool = None,
@@ -188,19 +258,75 @@ def TransformerEncoder(n: int, nb_heads: int, model_dim: int, obey_sequence_orde
     def inner(x):
 
         seq = x
-        x = blocks.pop(0)(x, x, x, None)
+        x = blocks.pop(0)(x, None)
 
         for block in blocks:
-            x = block(x, x, x, seq)
+            x = block(x, seq)
 
         return x
 
     return inner
 
 
-def TransformerDecoderBlock():
+def TransformerDecoder(n: int, nb_heads: int, model_dim: int, is_encoded_seq: bool, obey_sequence_order: bool = None,
+                       max_seq_len: int = None, output_as_seq: bool = False):
+    """ Transformer decoder as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
 
-    def decoder():
-        return None
+    Arguments:
+        n (int): number of decoder blocks
+        nb_heads (int): number of attention heads
+        model_dim (int): number of hidden dim in final output of multi-head attention
+        obey_sequence_order: do not let attention peek into future values
+        max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
+        output_as_seq: output attended tensor as a sequence
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
+
+    if n >= 2:
+        first = [TransformerDecoderBlock(nb_heads, model_dim, is_encoded_seq, None, obey_sequence_order, max_seq_len, False)]
+        last = [TransformerDecoderBlock(nb_heads, model_dim, is_encoded_seq, 1, obey_sequence_order, max_seq_len, output_as_seq)]
+        mid = [TransformerDecoderBlock(nb_heads, model_dim, is_encoded_seq, 1, obey_sequence_order, max_seq_len, False)
+               for __ in range(n - 2)]
+
+        blocks = first + mid + last if mid else first + last
+
+    elif n == 1:
+        blocks = [TransformerDecoderBlock(nb_heads, model_dim, is_encoded_seq, None, obey_sequence_order, max_seq_len, output_as_seq)]
+    else:
+        raise ValueError(f"n ({n}) must be larger than 0")
+
+    def decoder(encoded, x):
+        seq = x
+        x = blocks.pop(0)(encoded, x, None)
+
+        for block in blocks:
+            x = block(encoded, x, seq)
+
+        return x
 
     return decoder
+
+
+def Transformer(num_encoder_blocks: int = 6, num_decoder_blocks=6, num_heads_encoder: int = 16,
+                num_heads_decoder: int = 16, model_dim: int = 512, encoder_obey_sequence_order: bool = False,
+                decoder_obey_sequence_order: bool = True, max_seq_len_encoder: int = None,
+                max_seq_len_decoder: int = 100, output_as_seq: bool = True):
+
+    encoder = TransformerEncoder(n=num_encoder_blocks, nb_heads=num_heads_encoder, model_dim=model_dim,
+                                 obey_sequence_order=encoder_obey_sequence_order, max_seq_len=max_seq_len_encoder,
+                                 output_as_seq=False)
+
+    decoder = TransformerDecoder(n=num_decoder_blocks, nb_heads=num_heads_decoder, model_dim=model_dim,
+                                 is_encoded_seq=False, obey_sequence_order=decoder_obey_sequence_order,
+                                 max_seq_len=max_seq_len_decoder, output_as_seq=output_as_seq)
+
+    def model(tensor_to_encode, decoder_input_tensor):
+        # TODO: create an auto-regressive decoder
+        encoded = encoder(tensor_to_encode)
+        decoded = decoder(encoded, decoder_input_tensor)
+        return decoded
+
+    return model

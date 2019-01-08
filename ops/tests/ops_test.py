@@ -88,7 +88,22 @@ def test_scaled_dot_product_attention4():
 
 
 def test_scaled_dot_product_attention5():
-    """ returns a non-sequence while not peeking on future values """
+    """ if input is sequence, dynamic_axes_like don't need to be seq """
     a = C.sequence.input_variable(5)
     with pytest.raises(Exception):
         scaled_dot_product_attention(a, a, a, dynamic_axes_like=a)
+
+
+def test_scaled_dot_product_attention6():
+    """ query and key is non-seq and value is seq """
+    a = C.sequence.input_variable(5)
+    b = C.input_variable((-3, 5))
+
+    c = scaled_dot_product_attention(b, b, a)
+
+    n = np.random.random((3, 6, 5)).astype(np.float32)
+    m = [np.random.random((2, 5)).astype(np.float32),
+         np.random.random((4, 5)).astype(np.float32),
+         np.random.random((6, 5)).astype(np.float32)]
+
+    results = c.eval({a: m, b: n})

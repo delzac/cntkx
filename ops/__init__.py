@@ -62,13 +62,11 @@ def scaled_dot_product_attention(query, key, value, dynamic_axes_like=None, obey
     dynamic_seq_axis_present = any(ax.is_sequence_axis for ax in value.dynamic_axes)
     dk = sum(i for i in key.shape if i > 0)
 
-    unpacked_key = key
-    unpacked_query = query
+    unpacked_key = C.sequence.unpack(key, 0, True) if any(ax.is_sequence_axis for ax in key.dynamic_axes) else key
+    unpacked_query = C.sequence.unpack(query, 0, True) if any(ax.is_sequence_axis for ax in query.dynamic_axes) else query
     unpacked_value = value
 
     if dynamic_seq_axis_present and not dynamic_axes_like:
-        unpacked_key, __ = C.sequence.unpack(key, padding_value=0).outputs
-        unpacked_query, __ = C.sequence.unpack(query, padding_value=0).outputs
         unpacked_value, valid_mask_value = C.sequence.unpack(value, padding_value=0).outputs
 
     elif not dynamic_seq_axis_present and dynamic_axes_like:
@@ -79,7 +77,7 @@ def scaled_dot_product_attention(query, key, value, dynamic_axes_like=None, obey
 
     elif dynamic_seq_axis_present and dynamic_axes_like:
         raise ValueError("If input tensor is already a sequence, no need to provide another sequence-like")
-
+    # TODO: does times_transpose behave correctly for unpacked sequence
     scaled = C.times_transpose(unpacked_query, unpacked_key) / dk  # [#] [*, *] seq_len x seq_len
 
     if obey_sequence_order and max_seq_len:

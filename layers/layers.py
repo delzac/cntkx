@@ -243,6 +243,13 @@ def TransformerEncoder(n: int, num_heads: int, model_dim: int, obey_sequence_ord
                        max_seq_len: int = None, output_as_seq: bool = False):
     """ Transformer encoder as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
 
+    Example:
+        a = C.sequence.input_variable(10)
+
+        encoded = TransformerDecoder(3, 2, 10)(a)
+
+        assert encoded.shape == (-3, 10)
+
     Arguments:
         n (int): number of encoder blocks
         num_heads (int): number of attention heads
@@ -290,7 +297,7 @@ def TransformerDecoder(n: int, num_heads: int, model_dim: int, is_encoded_seq: b
         a = C.sequence.input_variable(10)
         encoded = C.input_variable((-1, 10)
 
-        decoded = TransformerDecoder(3, 2, 10, is_encoded_seq=False)
+        decoded = TransformerDecoder(3, 2, 10, is_encoded_seq=False)(encoded, a)
 
         assert decoded.shape == (-3, 10)
 

@@ -150,21 +150,21 @@ def MultiHeadAttentionBlock(num_heads, model_dim, map_ranks: tuple = None, obey_
 
     def block(query, key, value, dynamic_axes_like=None):
         # TODO: skip connect input is not always value, setting as query will be correct
-        dynamic_seq_axis_present = any(ax.is_sequence_axis for ax in value.dynamic_axes)
+        dynamic_seq_axis_present = any(ax.is_sequence_axis for ax in query.dynamic_axes)
 
         if dynamic_seq_axis_present and output_as_seq:
-            skip_connecet_input = query
+            skip_connect_input = query
         elif dynamic_seq_axis_present and not output_as_seq:
-            skip_connecet_input = C.sequence.unpack(query, padding_value=0, no_mask_output=True)
+            skip_connect_input = C.sequence.unpack(query, padding_value=0, no_mask_output=True)
         elif not dynamic_seq_axis_present and output_as_seq:
-            skip_connecet_input = C.to_sequence_like(query, dynamic_axes_like)
+            skip_connect_input = C.to_sequence_like(query, dynamic_axes_like)
         elif not dynamic_seq_axis_present and not output_as_seq:
-            skip_connecet_input = query
+            skip_connect_input = query
         else:
             raise ValueError("This branch should not be reachable")
 
         attended = attention_layer(query, key, value, dynamic_axes_like)
-        skip_connect_attended = attended + skip_connecet_input
+        skip_connect_attended = attended + skip_connect_input
         normed_skip_connect_attended = layernorm(skip_connect_attended)
         return normed_skip_connect_attended
 

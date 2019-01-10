@@ -153,11 +153,6 @@ def test_transformer_decoder2():
          np.random.random((6, 10)).astype(np.float32),
          np.random.random((8, 10)).astype(np.float32)]
 
-    m_like = [np.random.random((3, 10)).astype(np.float32),
-              np.random.random((5, 10)).astype(np.float32),
-              np.random.random((7, 10)).astype(np.float32),
-              np.random.random((8, 10)).astype(np.float32)]
-
     results = decoded.eval({a: m, b: n})
 
     decoder = TransformerDecoder(3, 2, 10, is_encoded_seq=False, output_as_seq=True)

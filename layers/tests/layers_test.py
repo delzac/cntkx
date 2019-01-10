@@ -223,7 +223,7 @@ def test_transformer_decoder_block1():
     decoder_block = TransformerDecoderBlock(num_heads=2, model_dim=10, is_encoded_seq=False, map_rank=None)
 
     encoded = encoder_block(a)
-    decoded = decoder_block(encoded, b, None, a)
+    decoded = decoder_block(encoded, b, None)
 
     assert decoded.shape == (-3, 10)
 
@@ -246,7 +246,7 @@ def test_transformer_decoder_block2():
     decoder_block = TransformerDecoderBlock(num_heads=2, model_dim=10, is_encoded_seq=True, map_rank=None)
 
     encoded = encoder_block(a)
-    decoded = decoder_block(encoded, b, None, None)
+    decoded = decoder_block(encoded, b, None)
 
     assert decoded.shape == (-3, 10)
 

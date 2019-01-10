@@ -1,5 +1,5 @@
 import cntk as C
-from cntkx.layers.models.attention import Transformer, TransformerDecoder, TransformerEncoder
+from cntkx.layers.models import Transformer, TransformerDecoder, TransformerEncoder
 import numpy as np
 
 
@@ -152,6 +152,11 @@ def test_transformer_decoder2():
          np.random.random((4, 10)).astype(np.float32),
          np.random.random((6, 10)).astype(np.float32),
          np.random.random((8, 10)).astype(np.float32)]
+
+    m_like = [np.random.random((3, 10)).astype(np.float32),
+              np.random.random((5, 10)).astype(np.float32),
+              np.random.random((7, 10)).astype(np.float32),
+              np.random.random((8, 10)).astype(np.float32)]
 
     results = decoded.eval({a: m, b: n})
 

@@ -65,26 +65,26 @@ def scaled_dot_product_attention(query, key, value, dynamic_axes_like=None, obey
         :class:`~cntk.ops.functions.Function`: weighted sum of value
 
     """
-    dynamic_seq_axis_present = any(ax.is_sequence_axis for ax in value.dynamic_axes)
+    dynamic_seq_axis_present = any(ax.is_sequence_axis for ax in query.dynamic_axes)
     dk = sum(i for i in key.shape if i > 0)
 
     unpacked_key = C.sequence.unpack(key, 0, True) if any(ax.is_sequence_axis for ax in key.dynamic_axes) else key
-    unpacked_query = C.sequence.unpack(query, 0, True) if any(ax.is_sequence_axis for ax in query.dynamic_axes) else query
-    unpacked_value = value
+    unpacked_value = C.sequence.unpack(value, 0, True) if any(ax.is_sequence_axis for ax in value.dynamic_axes) else value
 
+    unpacked_query = query
     if dynamic_seq_axis_present and not dynamic_axes_like:
-        unpacked_value, valid_mask_value = C.sequence.unpack(value, padding_value=0).outputs
+        unpacked_query, valid_mask_query = C.sequence.unpack(query, padding_value=0).outputs
 
     elif not dynamic_seq_axis_present and dynamic_axes_like:
-        valid_mask_value = C.sequence.unpack(dynamic_axes_like, padding_value=0).outputs[1]
+        valid_mask_query = C.sequence.unpack(dynamic_axes_like, padding_value=0).outputs[1]
 
     elif not dynamic_seq_axis_present and not dynamic_axes_like:
-        valid_mask_value = None
+        valid_mask_query = None
 
     elif dynamic_seq_axis_present and dynamic_axes_like:
         raise ValueError("If input tensor is already a sequence, no need to provide another sequence-like")
     # TODO: does times_transpose behave correctly for unpacked sequence
-    scaled = C.times_transpose(unpacked_query, unpacked_key) / dk  # [#] [*, *] seq_len x seq_len
+    scaled = C.times_transpose(unpacked_query, unpacked_key) / dk  # [#] [*, *] query_seq_len x query_seq_len
 
     if obey_sequence_order and max_seq_len:
         minus_inf = C.constant(-1e+30)
@@ -106,11 +106,11 @@ def scaled_dot_product_attention(query, key, value, dynamic_axes_like=None, obey
         # output as seq with provided sequence axis
         attended = C.to_sequence_like(attended, dynamic_axes_like)
 
-    elif not output_as_seq and valid_mask_value:
+    elif not output_as_seq and valid_mask_query:
         # output as non-seq when input was originally a sequence or if dynamic axis is provided
-        attended = C.element_select(C.expand_dims(valid_mask_value, -1), attended, C.Constant(0))
+        attended = C.element_select(C.expand_dims(valid_mask_query, -1), attended, C.Constant(0))
 
-    elif not output_as_seq and valid_mask_value is None:
+    elif not output_as_seq and valid_mask_query is None:
         pass  # no operations necessary
     else:
         raise ValueError(f"In order to output as a seq, either value must be a sequence or valid_mask is present")

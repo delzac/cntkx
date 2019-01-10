@@ -87,8 +87,8 @@ def MultiheadAttention(num_heads, model_dim, map_ranks: tuple = None, obey_seque
     Arguments:
         num_heads (int): number of attention heads
         model_dim (int): number of hidden dim in final output of multi-head attention
-        map_ranks (tuple): first item is for query/key. Second is value. set 1 if input tensor
-          is an unpacked sequence, None if it is a sequence. Default None.
+        map_ranks (tuple): map_rank for query, key, value if tuple, else qkv will get same map_ranks.
+          set 1 if input tensor is an unpacked sequence, None if it is a sequence. Default None.
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
         output_as_seq: output attended tensor as a sequence
@@ -98,13 +98,12 @@ def MultiheadAttention(num_heads, model_dim, map_ranks: tuple = None, obey_seque
 
     """
     assert model_dim % num_heads == 0, "Model dimension must be divisible by number of heads"
-    map_rank = (map_ranks, map_ranks) if not isinstance(map_ranks, tuple) else map_ranks
-    map_rank_query_key = map_rank[0]
-    map_rank_value = map_rank[1]
+    map_ranks = (map_ranks, map_ranks, map_ranks) if not isinstance(map_ranks, tuple) else map_ranks
+    map_rank_query, map_rank_key, map_rank_value = map_ranks
 
     head_dim = int(model_dim / num_heads)
-    query_linears = [Dense(head_dim, map_rank=map_rank_query_key) for __ in range(num_heads)]
-    key_linears = [Dense(head_dim, map_rank=map_rank_query_key) for __ in range(num_heads)]
+    query_linears = [Dense(head_dim, map_rank=map_rank_query) for __ in range(num_heads)]
+    key_linears = [Dense(head_dim, map_rank=map_rank_key) for __ in range(num_heads)]
     value_linears = [Dense(head_dim, map_rank=map_rank_value) for __ in range(num_heads)]
     multihead_liner = Dense(model_dim, map_rank=0 if output_as_seq else 1)
 
@@ -150,16 +149,17 @@ def MultiHeadAttentionBlock(num_heads, model_dim, map_ranks: tuple = None, obey_
     layernorm = LayerNormalization()
 
     def block(query, key, value, dynamic_axes_like=None):
+        # TODO: skip connect input is not always value, setting as query will be correct
         dynamic_seq_axis_present = any(ax.is_sequence_axis for ax in value.dynamic_axes)
 
         if dynamic_seq_axis_present and output_as_seq:
-            skip_connecet_input = value
+            skip_connecet_input = query
         elif dynamic_seq_axis_present and not output_as_seq:
-            skip_connecet_input = C.sequence.unpack(value, padding_value=0, no_mask_output=True)
+            skip_connecet_input = C.sequence.unpack(query, padding_value=0, no_mask_output=True)
         elif not dynamic_seq_axis_present and output_as_seq:
-            skip_connecet_input = C.to_sequence_like(value, dynamic_axes_like)
+            skip_connecet_input = C.to_sequence_like(query, dynamic_axes_like)
         elif not dynamic_seq_axis_present and not output_as_seq:
-            skip_connecet_input = value
+            skip_connecet_input = query
         else:
             raise ValueError("This branch should not be reachable")
 
@@ -174,6 +174,8 @@ def MultiHeadAttentionBlock(num_heads, model_dim, map_ranks: tuple = None, obey_
 def TransformerEncoderBlock(num_heads: int, model_dim: int, map_rank=None,
                             obey_sequence_order: bool = None, max_seq_len: int = None, output_as_seq: bool = False):
     """ Encoder block of transformer as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
+
+    Consist of 1 multi head attention followed by a dense layer, residual connect and layer norm
 
     Arguments:
         num_heads (int): number of attention heads
@@ -203,6 +205,8 @@ def TransformerDecoderBlock(num_heads: int, model_dim: int, is_encoded_seq: bool
                             obey_sequence_order: bool = None, max_seq_len: int = None, output_as_seq: bool = False):
     """ Decoder block of transformer as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
 
+    Consist of 2 multi head attention followed by a dense layer, residual connect and layer norm
+
     Arguments:
         num_heads (int): number of attention heads
         model_dim (int): number of hidden dim in final output of multi-head attention
@@ -216,7 +220,7 @@ def TransformerDecoderBlock(num_heads: int, model_dim: int, is_encoded_seq: bool
         :class:`~cntk.ops.functions.Function`:
 
     """
-    encoded_map_rank = (None if is_encoded_seq else 1, 1)
+    encoded_map_rank = (1, None if is_encoded_seq else 1, None if is_encoded_seq else 1)
     mha_block1 = MultiHeadAttentionBlock(num_heads, model_dim, map_rank, obey_sequence_order, max_seq_len, output_as_seq=False)
     mha_block2 = MultiHeadAttentionBlock(num_heads, model_dim, encoded_map_rank, obey_sequence_order, max_seq_len, output_as_seq)
 
@@ -226,13 +230,12 @@ def TransformerDecoderBlock(num_heads: int, model_dim: int, is_encoded_seq: bool
     def block(encoded, x, dynamic_axes_like=None):
         dynamic_seq_axis_present = any(ax.is_sequence_axis for ax in x.dynamic_axes)
 
-        # mha_block1 will always output as unpacked sequence tensor
         dynamic_axes_like2 = dynamic_axes_like
-        if dynamic_axes_like is None and dynamic_seq_axis_present:
+        if dynamic_seq_axis_present and dynamic_axes_like is None:
             dynamic_axes_like2 = x
 
         inner = mha_block1(x, x, x, dynamic_axes_like)
-        inner = mha_block2(encoded, encoded, inner, dynamic_axes_like2)
+        inner = mha_block2(inner, encoded, encoded, dynamic_axes_like2)
         output = layernorm_feed_foward(ResNetBlock(feed_foward)(inner))
         return output
 

@@ -24,4 +24,4 @@ def test_greedy_decoding_transformer():
     assert start_token.shape == (1, 10)
     assert end_token.shape == (10, )
 
-    results = greedy_decoder(decoded, input_sentence, start_token, end_token)
+    results = greedy_decoder(decoded, input_sentence, start_token, end_token, 100)

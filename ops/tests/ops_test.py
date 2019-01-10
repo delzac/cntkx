@@ -1,5 +1,5 @@
 import cntk as C
-from cntkx.ops import cumsum, scaled_dot_product_attention
+from cntkx.ops import cumsum, scaled_dot_product_attention, hardmax
 import numpy as np
 from numpy.testing import assert_equal, assert_raises
 import pytest
@@ -107,3 +107,31 @@ def test_scaled_dot_product_attention6():
          np.random.random((6, 5)).astype(np.float32)]
 
     results = c.eval({a: m, b: n})
+
+
+def test_hardmax():
+    a = C.input_variable((3, 5))
+
+    n = np.array([[0.2, 0.2, 0.3, 0.2, 0.2],
+                  [0.2, 0.4, 0.3, 0.2, 0.2],
+                  [0.5, 0.2, 0.3, 0.2, 0.2]]).astype(np.float32)[None, ...]
+
+    m = np.array([[0, 0, 1, 0, 0],
+                  [0, 1, 0, 0, 0],
+                  [1, 0, 0, 0, 0]])
+
+    results = hardmax(a).eval({a: n})
+
+    assert_equal(results[0], m)
+
+    n = np.array([[0.2, 0.2, 0.3, 0.2, 0.2],
+                  [0.2, 0.4, 0.3, 0.2, 0.2],
+                  [0.5, 0.2, 0.3, 0.2, 0.2]]).astype(np.float32)[None, ...]
+
+    m = np.array([[0, 0, 0, 0, 0],
+                  [0, 0, 0, 0, 0],
+                  [1, 0, 0, 0, 0]])
+
+    results = hardmax(a, axis=None).eval({a: n})
+
+    assert_equal(results[0], m)

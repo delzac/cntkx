@@ -118,6 +118,25 @@ def scaled_dot_product_attention(query, key, value, dynamic_axes_like=None, obey
     return attended
 
 
+@C.typemap
+def hardmax(x, axis=-1, name=''):
+    """
+    This hardmax implementation can be applied on selected axis. Original cntk hardmax can only be applied on all axis.
+
+    If ``axis`` is given as integer, then the hardmax will be computed along that axis.
+    If the provided ``axis`` is -1, it will be computed along the last axis. if None, it will be applied to all axes.
+
+    Arguments:
+    x: input_tensor
+    axis (int or :class:`~cntk.axis.Axis`): axis along which the hardmax operation will be performed
+    name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+    """
+    return C.equal(C.reduce_max(x, axis=axis), x, name=name)
+
+
 ##########################################################################
 # mixture density network ops
 ##########################################################################

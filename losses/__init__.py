@@ -10,6 +10,18 @@ def gaussian_mdn_loss(output_vector, target_vector, nmix: int, ndim: int):
     Mixture density networks are useful when trying to represent arbitrary conditional probabilities
     the same way a conventional neural network can represent arbitrary functions.
 
+    Example:
+        ndim, nmix = 1, 3
+        input_tensor = C.input_variable(1, name="input_tensor")
+        target_tensor = C.input_variable(1, name="target_tensor")
+
+        # model
+        inner = Dense(50, activation=C.relu)(input_tensor)
+        inner = Dense(50, activation=C.relu)(inner)
+        prediction_tensor = Dense((ndim + 2) * nmix, activation=None)(inner)
+
+        loss = gaussian_mdn_loss(prediction_tensor, target_tensor, nmix=nmix, ndim=ndim)
+
     Arguments:
         output_vector: network output
         target_vector: ground truths (typically a continuous variable)

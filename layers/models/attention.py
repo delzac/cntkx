@@ -141,7 +141,6 @@ def Transformer(num_encoder_blocks: int = 6, num_decoder_blocks=6, num_heads_enc
                                  max_seq_len=max_seq_len_decoder, output_as_seq=output_as_seq)
 
     def model(tensor_to_encode, decoder_input_tensor):
-        # TODO: create an auto-regressive decoder
         encoded = encoder(tensor_to_encode)
         decoded = decoder(encoded, decoder_input_tensor)
         return decoded

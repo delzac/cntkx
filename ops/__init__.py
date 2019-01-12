@@ -148,6 +148,14 @@ def gaussian_mdn_coeff(x, nmix: int, ndim: int):
     Extracts the coefficients for gaussian mixture density network.
     Assumes independence between gaussian dimensions.
 
+    Example:
+        ndim, nmix = 1, 3
+        a = C.input_variable(ndim)
+        prediction = Dense((ndim + 2) * nmix)(a)
+        coeffs = C.combine(gaussian_mdn_coeff(prediction_tensor, nmix=nmix, ndim=ndim)).eval({a: x})
+
+        alpha, mu, sigma = coeffs.values()
+
     Arguments:
         x: input tensor
         nmix (int): number of mixture
@@ -169,6 +177,14 @@ def gaussian_mdn_coeff(x, nmix: int, ndim: int):
 
 def sample_gaussian_mdn(prediction_tensor, nmix: int, ndim: int):
     """ Constructs sampling nodes from mixture density network outputs
+
+    Example:
+        ndim, nmix = 1, 3
+        a = C.input_variable(ndim)
+        prediction = Dense((ndim + 2) * nmix)(a)
+        sampled = sample_gaussian_mdn(prediction, nmix, ndim)
+
+        results = sampled.eval({a: x})  # different results every time you eval
 
     Arguments:
         prediction_tensor: input tensor

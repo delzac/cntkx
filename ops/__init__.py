@@ -28,6 +28,69 @@ def cumsum(x, axis: int=-1):
     return z
 
 
+def upsample(x):
+    """ Up sample image by a factor of 2 using nearest neighbour.
+
+    Example:
+        a = C.input_variable((3, 32, 32)
+        b = UpSampling2D(a)
+
+        assert b.shape == (3, 64, 64)
+
+    Arguments:
+        x: input image tensor, assumed (channel, row, col)
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+
+    """
+    xr = C.reshape(x, (x.shape[0], x.shape[1], 1, x.shape[2], 1))
+    xx = C.splice(xr, xr, axis=-1)  # axis=-1 refers to the last axis
+    xy = C.splice(xx, xx, axis=-3)  # axis=-3 refers to the middle axis
+    r = C.reshape(xy, (x.shape[0], x.shape[1] * 2, x.shape[2] * 2))
+    return r
+
+
+def centre_crop(larger_image, smaller_image, name: str = ''):
+    """ Centre crop spatial dimensions only.
+
+    Arguments:
+        larger_image: class:`~cntk.ops.functions.Function` that outputs the tensor to be centre cropped
+        smaller_image: class:`~cntk.ops.functions.Function` that outputs the reference tensor
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+
+    """
+    input_shape = larger_image.shape  # larger
+    referent_shape = smaller_image.shape  # smaller
+    row_offset = int((input_shape[1] - referent_shape[1]) / 2)
+    col_offset = int((input_shape[2] - referent_shape[2]) / 2)
+
+    if row_offset == 0 and col_offset == 0:
+        return larger_image
+
+    elif row_offset < 0 or col_offset < 0:
+        raise ValueError(f"offset became negative, check if image was passed correctly. "
+                         f"larger image {larger_image.shape}, smaller image {smaller_image.shape}")
+
+    return C.crop_manual(larger_image, smaller_image, row_offset, col_offset, name=name)
+
+
+def centre_crop_and_splice(larger_image, smaller_image):
+    """ Implementation of copy and crop found in UNET architecture.
+
+    Arguments:
+        larger_image: to be centre cropped and channel spliced into smaller image
+        smaller_image: reference tensor
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+
+    """
+    return C.splice(smaller_image, centre_crop(larger_image, smaller_image), axis=0)
+
 ##########################################################################
 # non linear ops
 ##########################################################################

@@ -261,18 +261,16 @@ def test_transformer():
 
 def test_vgg16():
     a = C.input_variable((3, 64, 64))
-    vgg16 = VGG16(100)
-    prediction = vgg16(a)
+    b = VGG16(100)(a)
 
-    assert prediction.shape == (100, )
+    assert b.shape == (100, )
 
 
 def test_vgg19():
     a = C.input_variable((3, 64, 64))
-    vgg16 = VGG19(100)
-    prediction = vgg16(a)
+    b = VGG19(100)(a)
 
-    assert prediction.shape == (100,)
+    assert b.shape == (100,)
 
 
 def test_unet():

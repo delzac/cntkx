@@ -10,6 +10,33 @@ cntk is a dependency to cntkx. Please get a working installation of cntk first. 
 
 ## News
 ***2019-01-12.***
+#### Added Vision models: VGG16, VGG19 and UNET
+VGG is for image classification and UNET is for semantic segmentation. VGG is implemented for completeness 
+sake and should not be used for any serious classification task.
+
+
+Paper on VGG can be found [here](https://arxiv.org/abs/1409.1556) titled "Very Deep Convolutional Networks 
+for Large-Scale Image Recognition"
+
+Paper for UNET can be found [here](https://arxiv.org/abs/1505.04597) titled "U-Net: Convolutional Networks 
+for Biomedical Image Segmentation"
+
+VGG example:
+
+    a = C.input_variable((3, 64, 64))
+    vgg16 = VGG19(100)
+    prediction = vgg16(a)
+
+    assert prediction.shape == (100,)
+
+UNET example:
+
+    a = C.input_variable((3, 512, 512))
+    b = UNET(num_classes=10, base_num_filters=64, pad=True)(a)
+
+    assert b.shape == (10, 512, 512)
+
+
 #### Added Transformer attention model and associated components
 The Transformer was first introduced in the [paper](https://arxiv.org/abs/1706.03762) 'Attention is all you need'.
 The architecture is based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.

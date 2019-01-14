@@ -1,6 +1,6 @@
 import cntk as C
 from cntkx.layers import QRNN, MultiheadAttention, MultiHeadAttentionBlock, TransformerEncoderBlock
-from cntkx.layers import TransformerDecoderBlock
+from cntkx.layers import TransformerDecoderBlock, SinusoidalPositionalEmbedding
 import numpy as np
 import pytest
 
@@ -297,3 +297,20 @@ def test_transformer_decoder_block3():
 
     results = decoded.eval({a: n, b: m})
 
+
+def test_sinusoidal_positional_embedding():
+    a = C.sequence.input_variable(10)
+    b = SinusoidalPositionalEmbedding()(a)
+
+    assert b.shape == (10, )
+
+    n = np.random.random((1, 5, 10)).astype(np.float32)
+    r = b.eval({a: n})
+
+    a = C.sequence.input_variable(9)
+    b = SinusoidalPositionalEmbedding()(a)
+
+    assert b.shape == (9, )
+
+    n = np.random.random((1, 5, 9)).astype(np.float32)
+    r = b.eval({a: n})

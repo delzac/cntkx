@@ -1,10 +1,12 @@
+import math
+import numpy as np
 import cntk as C
 import cntkx as Cx
 from cntk.layers import SequentialConvolution, Recurrence, Dense, LayerNormalization, ResNetBlock
 from cntkx.ops import scaled_dot_product_attention
 
 
-def QRNN(window: int=1, hidden_dim=None, activation=C.tanh, return_full_state=False):
+def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=False):
     """
     Quasi-Recurrent Neural Networks layer
 
@@ -31,6 +33,7 @@ def QRNN(window: int=1, hidden_dim=None, activation=C.tanh, return_full_state=Fa
           tokens to look when computing the QRNN values). Defaults 1.
         hidden_dim (int): size of hidden dim of h, c and o
         activation: cell activation function
+        return_full_state: if to return cell and hidden states. Default false.
 
     Returns:
         :class:`~cntk.ops.functions.Function`: OR
@@ -240,3 +243,64 @@ def TransformerDecoderBlock(num_heads: int, model_dim: int, is_encoded_seq: bool
         return output
 
     return block
+
+
+def SinusoidalPositionalEmbedding(min_timescale=1.0, max_timescale=1.0e4, name: str = ''):
+    """ Gets a bunch of sinusoids of different frequencies and add it to the input sequence
+
+    Each channel of the input Tensor is incremented by a sinusoid of a different
+    frequency and phase. This allows attention to learn to use absolute and relative positions.
+
+    Timing signals should be added to some precursors of both the query and the
+    memory inputs to attention. The use of relative position is possible because
+    sin(x+y) and cos(x+y) can be expressed in terms of y, sin(x) and cos(x).
+
+    In particular, we use a geometric sequence of timescales starting with
+    min_timescale and ending with max_timescale. The number of different
+    timescales is equal to channels / 2. For each timescale, we
+    generate the two sinusoidal signals sin(timestep/timescale) and
+    cos(timestep/timescale).  All of these sinusoids are concatenated in
+    the channels dimension.
+
+    This matches the implementation in tensor2tensor, but differs slightly
+    from the description in Section 3.5 of "Attention Is All You Need" in
+    that if input_dim is odd, the last dim will be a zero value.
+
+    This implementation is equivalent to get_timing_signal_1d() in tensorflow's tensor2tensor:
+        https://github.com/tensorflow/tensor2tensor/blob/23bd23b9830059fbc349381b70d9429b5c40a139/
+          tensor2tensor/layers/common_attention.py
+
+    Arguments:
+        min_timescale (float): geometric sequence of timescales starting with min_timescale
+        max_timescale (float): geometric sequence of timescales ending with max_timescale
+        name (str): a name for this layer.
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`: same shape as input sequence tensor
+
+    """
+
+    @C.Function
+    def position(p, x):
+        return p + x * 0 + 1
+
+    def embedding(x):
+        dim = x.shape[0]
+        num_timescales = dim // 2
+        log_timescale_increment = (math.log(float(max_timescale) / float(min_timescale)) / (num_timescales - 1))
+        inv_timescales = C.constant(min_timescale * np.exp(np.arange(num_timescales) * -log_timescale_increment),
+                                    dtype=np.float32)
+
+        pos = Recurrence(position)(C.slice(x, 0, 0, num_timescales))
+        scaled_time = pos * inv_timescales
+        s = C.sin(scaled_time)
+        c = C.cos(scaled_time)
+        signal = C.splice(s, c)
+
+        # last dim gets a 0 value is input_dim is odd
+        if dim % 2 != 0:
+            signal = C.pad(signal, [[0, 1]])
+
+        return C.plus(signal, x, name=name)
+
+    return embedding

@@ -8,7 +8,7 @@ from . import random
 # linear ops
 ##########################################################################
 
-def cumsum(x, axis: int=-1):
+def cumsum(x, axis: int = -1):
     """ Calculates the cumulative sum across a static axis
 
     Arguments:
@@ -19,7 +19,7 @@ def cumsum(x, axis: int=-1):
         :class:`~cntk.ops.functions.Function`
     """
     d = x.shape[axis]
-    u = C.constant(np.triu(np.ones((d,d))).astype(x.dtype))
+    u = C.constant(np.triu(np.ones((d, d))).astype(x.dtype))
     if axis != -1:
         x = C.swapaxes(x, -1, axis)
     z = C.times(x, u)
@@ -91,8 +91,9 @@ def centre_crop_and_splice(larger_image, smaller_image):
     """
     return C.splice(smaller_image, centre_crop(larger_image, smaller_image), axis=0)
 
+
 ##########################################################################
-# non linear ops
+# non linear and nn ops
 ##########################################################################
 @C.typemap
 def scaled_dot_product_attention(query, key, value, dynamic_axes_like=None, obey_sequence_order: bool = None,
@@ -203,8 +204,6 @@ def hardmax(x, axis=-1, name=''):
 ##########################################################################
 # mixture density network ops
 ##########################################################################
-
-
 @C.typemap
 def gaussian_mdn_coeff(x, nmix: int, ndim: int):
     """

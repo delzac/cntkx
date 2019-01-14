@@ -9,6 +9,17 @@ cntk is a dependency to cntkx. Please get a working installation of cntk first. 
 
 
 ## News
+***2019-01-15.***
+#### Added Sinusoidal Positional Embedding
+Added sinusoidal positional embedding used in [Transformer](https://arxiv.org/abs/1706.03762). For an accessible
+explanation of transformer, you may look up [here](http://jalammar.github.io/illustrated-transformer/).
+
+    a = C.sequence.input_variable(10)
+    b = SinusoidalPositionalEmbedding()(a)
+
+    assert b.shape == (10, )
+
+
 ***2019-01-12.***
 #### Added Vision models: VGG16, VGG19 and UNET
 VGG is for image classification and UNET is for semantic segmentation. VGG is implemented for completeness 
@@ -34,6 +45,10 @@ UNET example:
     b = UNET(num_classes=10, base_num_filters=64, pad=True)(a)
 
     assert b.shape == (10, 512, 512)
+
+Convenience functions such as `cntkx.ops.upsample` and `centre_crop` have also been added.
+`cntkx.ops.upsample` upsamples an image twice on each spatial dim. `centre_crop` crops a smaller image from
+a bigger one in the centre given a reference smaller image.
 
 
 #### Added Transformer attention model and associated components

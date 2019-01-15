@@ -201,6 +201,37 @@ def hardmax(x, axis=-1, name=''):
     return C.equal(C.reduce_max(x, axis=axis), x, name=name)
 
 
+@C.typemap
+def erf(x, name=''):
+    """
+    Computes the element-wise error function of `x`:
+
+    The output tensor has the same shape as ``x``.
+
+    This implementation is from the Handbook of Mathematical Functions and
+    has error less than 1.5 * 10-7 for all inputs.
+    book can be found here 'http://people.math.sfu.ca/~cbm/aands/frameindex.htm'
+
+    """
+    not_negative = C.greater_equal(x, 0)
+    sign = C.element_select(not_negative, not_negative, -1)
+
+    abs_x = C.abs(x)
+
+    # constants
+    a1 = 0.254829592
+    a2 = -0.284496736
+    a3 = 1.421413741
+    a4 = -1.453152027
+    a5 = 1.061405429
+    p = 0.3275911
+
+    # A&S formula 7.1.26
+    t = 1.0 / (1.0 + p * x)
+    y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * C.exp(-abs_x * abs_x)
+    return C.element_times(sign, y, name=name)
+
+
 ##########################################################################
 # mixture density network ops
 ##########################################################################

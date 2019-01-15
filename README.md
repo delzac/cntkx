@@ -10,7 +10,7 @@ cntk is a dependency to cntkx. Please get a working installation of cntk first. 
 
 ## News
 ***2019-01-15.***
-#### Added Sinusoidal Positional Embedding
+#### Added Sinusoidal Positional Embedding and `cntkx.ops.erf`
 Added sinusoidal positional embedding used in [Transformer](https://arxiv.org/abs/1706.03762). For an accessible
 explanation of transformer, you may look up [here](http://jalammar.github.io/illustrated-transformer/).
 
@@ -19,6 +19,7 @@ explanation of transformer, you may look up [here](http://jalammar.github.io/ill
 
     assert b.shape == (10, )
 
+Added `cntkx.ops.erf` error function.
 
 ***2019-01-12.***
 #### Added Vision models: VGG16, VGG19 and UNET

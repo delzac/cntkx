@@ -2,7 +2,10 @@ import math
 import numpy as np
 import cntk as C
 import cntkx as Cx
+from cntk.default_options import default_override_or
+from cntk.layers.blocks import identity
 from cntk.layers import SequentialConvolution, Recurrence, Dense, LayerNormalization, ResNetBlock
+from cntk.layers import MaxPooling, Convolution2D
 from cntkx.ops import scaled_dot_product_attention
 
 
@@ -304,3 +307,97 @@ def SinusoidalPositionalEmbedding(min_timescale=1.0, max_timescale=1.0e4, name: 
         return C.plus(signal, x, name=name)
 
     return embedding
+
+
+def Conv2DMaxPool(n, conv_filter_shape,  # shape of receptive field, e.g. (3,3). Must be a 2-element tuple.
+                  pool_filter_shape,  # shape of receptive field, e.g. (3,3)
+                  conv_num_filters=None,  # e.g. 64 or None (which means 1 channel and don't add a dimension)
+                  activation=default_override_or(identity),
+                  init=default_override_or(C.glorot_uniform()),
+                  conv_pad=default_override_or(False),
+                  conv_strides=1,
+                  bias=default_override_or(True),
+                  init_bias=default_override_or(0),
+                  reduction_rank=1,  # (0 means input has no depth dimension, e.g. audio signal or B&W image)
+                  dilation=1,
+                  groups=1,
+                  pool_strides=1,
+                  pool_pad=default_override_or(False),
+                  name_prefix=''):
+    """ Stack of Convolution 2D followed by one max pooling layer. Convenience wrapper. """
+
+    conv_stack = Convolution2DStack(n, conv_filter_shape, conv_num_filters, activation, init, conv_pad, conv_strides,
+                                    bias, init_bias, reduction_rank, dilation, groups, name_prefix)
+
+    maxpool = MaxPooling(pool_filter_shape, pool_strides, pool_pad, name_prefix + '_pool')
+
+    def layer(x):
+        x = conv_stack(x)
+        x = maxpool(x)
+        return x
+
+    return layer
+
+
+def Convolution2DStack(num_conv_layers,  # num of convolutional layers in the stack
+                       filter_shape,  # shape of receptive field, e.g. (3,3). Must be a 2-element tuple.
+                       num_filters=None,  # e.g. 64 or None (which means 1 channel and don't add a dimension)
+                       activation=default_override_or(identity),
+                       init=default_override_or(C.glorot_uniform()),
+                       pad=default_override_or(False),
+                       strides=1,
+                       bias=default_override_or(True),
+                       init_bias=default_override_or(0),
+                       reduction_rank=1,  # (0 means input has no depth dimension, e.g. audio signal or B&W image)
+                       dilation=1,
+                       groups=1,
+                       name_prefix=''):
+    """ A stack of of convolutional layers. Convenience wrapper. """
+
+    convs = [Convolution2D(filter_shape, num_filters, activation, init, pad, strides, bias,
+                           init_bias, reduction_rank, dilation, groups,
+                           name_prefix + f'_conv_{i}') for i in range(num_conv_layers)]
+
+    def inner(x):
+
+        for conv in convs:
+            x = conv(x)
+
+        return x
+
+    return inner
+
+
+def SpatialPyramidPooling(bins: tuple, name=''):
+    """ Spatial pyramid pooling layer for 2D inputs.
+
+    See Spatial Pyramid Pooling in Deep Convolutional Networks for Visual Recognition,
+    K. He, X. Zhang, S. Ren, J. Sun (https://arxiv.org/abs/1406.4729)
+
+    SSP is used for multi-sized training where during training we implement the varying-input-size SPP-net
+    by two fixed-size networks that share parameters. SSP layer will be different for the 2 network that
+    shares parameters since the SSP would have different windows and stride.
+
+    The final output shape would be input_num_filters * reduce_sum(square(bins))
+    e.g. bins = (1, 3, 5) and input_num_filters = 32 then output_shape = (32 * (1 * 1 + 3 * 3 + 5 * 5), ) regardless
+    of input feature map's spatial dimension.
+
+    Arguments:
+        bins (tuple): tuple of ints stating the depth of the pyramid and number of bins at each level.
+        name (str, optional): name of layer
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
+
+    def spp(x):
+        spatial = x.shape[1:]
+        filter_shapes = [tuple(math.ceil(s / bin) for s in spatial) for bin in bins]
+        strides = [tuple(math.floor(s / bin) for s in spatial) for bin in bins]
+
+        pools = [MaxPooling(filter_shape, stride, pad=False) for filter_shape, stride in zip(filter_shapes, strides)]
+        features = [C.flatten(pool(x)) for pool in pools]
+        return C.squeeze(C.splice(*features), name=name)
+
+    return spp

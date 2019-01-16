@@ -1,40 +1,9 @@
 import cntk as C
 import cntkx as Cx
-from cntk.layers import Convolution2D, MaxPooling, Dense, Dropout
-from cntk.default_options import default_override_or
+import numpy as np
+from cntk.layers import Convolution2D, Dense, Dropout, MaxPooling, BatchNormalization, AveragePooling
 from cntk.layers.blocks import identity
-
-
-def Conv2DMaxPool(n, conv_filter_shape,  # shape of receptive field, e.g. (3,3). Must be a 2-element tuple.
-                  pool_filter_shape,  # shape of receptive field, e.g. (3,3)
-                  conv_num_filters=None,  # e.g. 64 or None (which means 1 channel and don't add a dimension)
-                  activation=default_override_or(identity),
-                  init=default_override_or(C.glorot_uniform()),
-                  conv_pad=default_override_or(False),
-                  conv_strides=1,
-                  bias=default_override_or(True),
-                  init_bias=default_override_or(0),
-                  reduction_rank=1,  # (0 means input has no depth dimension, e.g. audio signal or B&W image)
-                  dilation=1,
-                  groups=1,
-                  pool_strides=1,
-                  pool_pad=default_override_or(False),
-                  name_prefix=''):
-    """ n Convolution 2D followed by one max pooling layer. Convenience wrapper around Conv2D and MaxPooling. """
-
-    convs = [Convolution2D(conv_filter_shape, conv_num_filters, activation, init, conv_pad, conv_strides, bias,
-                           init_bias, reduction_rank, dilation, groups, name_prefix + f'_conv_{i}') for i in range(n)]
-    maxpool = MaxPooling(pool_filter_shape, pool_strides, pool_pad, name_prefix + '_pool')
-
-    def layer(x):
-
-        for conv in convs:
-            x = conv(x)
-
-        x = maxpool(x)
-        return x
-
-    return layer
+from cntkx.layers import Conv2DMaxPool
 
 
 def VGG16(num_classes: int):
@@ -110,6 +79,72 @@ def VGG19(num_classes: int):
         return x
 
     return model
+
+
+def conv_bn(input, filter_size, num_filters, strides=(1, 1), init=C.he_normal(), bn_init_scale=1):
+    c = Convolution2D(filter_size, num_filters, activation=None, init=init, pad=True, strides=strides, bias=False)(input)
+    r = BatchNormalization(map_rank=1, normalization_time_constant=4096, use_cntk_engine=False, init_scale=bn_init_scale, disable_regularization=True)(c)
+    return r
+
+
+def conv_bn_relu(input, filter_size, num_filters, strides=(1, 1), init=C.he_normal()):
+    r = conv_bn(input, filter_size, num_filters, strides, init, 1)
+    return C.relu(r)
+
+
+def resnet_bottleneck(input, out_num_filters, inter_out_num_filters):
+    c1 = conv_bn_relu(input, (1, 1), inter_out_num_filters)
+    c2 = conv_bn_relu(c1, (3, 3), inter_out_num_filters)
+    c3 = conv_bn(c2, (1, 1), out_num_filters, bn_init_scale=0)
+    p = c3 + input
+    return C.relu(p)
+
+
+def resnet_bottleneck_inc(input, out_num_filters, inter_out_num_filters, stride1x1, stride3x3):
+    c1 = conv_bn_relu(input, (1, 1), inter_out_num_filters, strides=stride1x1)
+    c2 = conv_bn_relu(c1, (3, 3), inter_out_num_filters, strides=stride3x3)
+    c3 = conv_bn(c2, (1, 1), out_num_filters, bn_init_scale=0)
+    stride = np.multiply(stride1x1, stride3x3)
+    s = conv_bn(input, (1, 1), out_num_filters, strides=stride) # Shortcut
+    p = c3 + s
+    return C.relu(p)
+
+
+def resnet_bottleneck_stack(input, num_stack_layers, out_num_filters, inter_out_num_filters):
+    assert(num_stack_layers >= 0)
+    l = input
+    for _ in range(num_stack_layers):
+        l = resnet_bottleneck(l, out_num_filters, inter_out_num_filters)
+    return l
+
+
+def create_imagenet_model_bottleneck(input, num_stack_layers, num_classes, stride1x1, stride3x3):
+    c_map = [64, 128, 256, 512, 1024, 2048]
+
+    # conv1 and max pooling
+    conv1 = conv_bn_relu(input, (7, 7), c_map[0], strides=(2, 2))
+    pool1 = MaxPooling((3,3), strides=(2,2), pad=True)(conv1)
+
+    # conv2_x
+    r2_1 = resnet_bottleneck_inc(pool1, c_map[2], c_map[0], (1, 1), (1, 1))
+    r2_2 = resnet_bottleneck_stack(r2_1, num_stack_layers[0], c_map[2], c_map[0])
+
+    # conv3_x
+    r3_1 = resnet_bottleneck_inc(r2_2, c_map[3], c_map[1], stride1x1, stride3x3)
+    r3_2 = resnet_bottleneck_stack(r3_1, num_stack_layers[1], c_map[3], c_map[1])
+
+    # conv4_x
+    r4_1 = resnet_bottleneck_inc(r3_2, c_map[4], c_map[2], stride1x1, stride3x3)
+    r4_2 = resnet_bottleneck_stack(r4_1, num_stack_layers[2], c_map[4], c_map[2])
+
+    # conv5_x
+    r5_1 = resnet_bottleneck_inc(r4_2, c_map[5], c_map[3], stride1x1, stride3x3)
+    r5_2 = resnet_bottleneck_stack(r5_1, num_stack_layers[3], c_map[5], c_map[3])
+
+    # Global average pooling and output
+    pool = AveragePooling(filter_shape=(7, 7), name='final_avg_pooling')(r5_2)
+    z = Dense(num_classes, init=C.normal(0.01))(pool)
+    return z
 
 
 def UNET(num_classes, base_num_filters, pad=False):

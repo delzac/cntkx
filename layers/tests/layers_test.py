@@ -1,6 +1,6 @@
 import cntk as C
 from cntkx.layers import QRNN, MultiheadAttention, MultiHeadAttentionBlock, TransformerEncoderBlock
-from cntkx.layers import TransformerDecoderBlock, SinusoidalPositionalEmbedding
+from cntkx.layers import TransformerDecoderBlock, SinusoidalPositionalEmbedding, SpatialPyramidPooling
 import numpy as np
 import pytest
 
@@ -314,3 +314,37 @@ def test_sinusoidal_positional_embedding():
 
     n = np.random.random((1, 5, 9)).astype(np.float32)
     r = b.eval({a: n})
+
+
+def test_spatial_pyramid_pooling():
+    # test 1
+    n = np.random.random((3, 3, 32, 32)).astype(np.float32)
+    a = C.input_variable((3, 32, 32))
+    b = SpatialPyramidPooling((1, 2, 4))(a)
+
+    assert b.shape == (3 * (4 * 4 + 2 * 2 + 1),)
+    b.eval({a: n})
+
+    # test 2
+    n = np.random.random((3, 3, 35, 35)).astype(np.float32)
+    a = C.input_variable((3, 35, 35))
+    b = SpatialPyramidPooling((1, 2, 4))(a)
+
+    assert b.shape == (3 * (4 * 4 + 2 * 2 + 1),)
+    b.eval({a: n})
+
+    # test 3
+    n = np.random.random((3, 3, 35, 35)).astype(np.float32)
+    a = C.input_variable((3, 35, 35))
+    b = SpatialPyramidPooling((1, 3, 5))(a)
+
+    assert b.shape == (3 * (5 * 5 + 3 * 3 + 1), )
+    b.eval({a: n})
+
+    # test 3
+    n = np.random.random((3, 3, 41, 41)).astype(np.float32)
+    a = C.input_variable((3, 41, 41))
+    b = SpatialPyramidPooling((1, 3, 5))(a)
+
+    assert b.shape == (3 * (5 * 5 + 3 * 3 + 1),)
+    b.eval({a: n})

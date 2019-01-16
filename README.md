@@ -9,6 +9,22 @@ cntk is a dependency to cntkx. Please get a working installation of cntk first. 
 
 
 ## News
+***2019-01-16.***
+#### Added Spatial Pyramid Pooling layer
+Spatial pyramid pooling layer is a pooling layer than returns a fixed length representation regardless of the 
+image size/scale. It is frequently used for multi-size image training. It reported SOTA classification results using
+a single full-image representation without fine-tuning. For more details on the paper
+"Spatial Pyramid Pooling in Deep Convolutional Networks for Visual Recognition" by K. He, X. Zhang, S. Ren, J. Sun,
+link [here](https://arxiv.org/abs/1406.4729).
+
+
+    n = np.random.random((3, 3, 32, 32)).astype(np.float32)
+    a = C.input_variable((3, 32, 32))
+    b = SpatialPyramidPooling((1, 2, 4))(a)
+
+    assert b.shape == (3 * (4 * 4 + 2 * 2 + 1),)  # representation not dependent on image size
+
+
 ***2019-01-15.***
 #### Added Sinusoidal Positional Embedding and `cntkx.ops.erf`
 Added sinusoidal positional embedding used in [Transformer](https://arxiv.org/abs/1706.03762). For an accessible

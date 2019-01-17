@@ -18,21 +18,16 @@ def ScaledDotProductAttention(obey_sequence_order: bool = None, max_seq_len: int
 
     Example:
         a = C.sequence.input_variable(10)
-        b = scaled_dot_product_attention(a, a, a)
+        b = ScaledDotProductAttention()(a, a, a)
 
-        assert b.shape == (-3, 10)
+        assert b.shape == (10, )
 
-    Arguments:
-        query: input sequence of 1d tensors (vectors)
-        key: input tensor of rank 2 or a sequence of rank 1 tensor (i.e. vector)
-        value: input tensor of rank 2 or a sequence of rank 1 tensor (i.e. vector)
-        dynamic_axes_like: Used to convert into sequence or zero out padded unpacked tensors that should not contain values
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
-        output_as_seq: output attended tensor as a sequence
 
     Returns:
-        :class:`~cntk.ops.functions.Function`: weighted sum of value
+        :class:`~cntk.ops.functions.Function`:
+        A function that returns a weighted sum of value
 
     """
 
@@ -71,18 +66,15 @@ def MultiHeadAttention(num_heads, model_dim, obey_sequence_order: bool = None, m
 
     Example:
         a = C.sequence.input_variable(10)
-        b = MultiHeadAttention(2, 10)(a, a, a, None)
+        b = MultiHeadAttention(2, 10)(a, a, a)
 
         assert b.shape == (10, )
 
     Arguments:
         num_heads (int): number of attention heads
         model_dim (int): number of hidden dim in final output of multi-head attention
-        map_ranks (tuple): map_rank for query, key, value if tuple, else qkv will get same map_ranks.
-          set 1 if input tensor is an unpacked sequence, None if it is a sequence. Default None.
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
-        output_as_seq: output attended tensor as a sequence
 
     Returns:
         :class:`~cntk.ops.functions.Function`:
@@ -116,18 +108,15 @@ def MultiHeadAttentionBlock(num_heads, model_dim, obey_sequence_order: bool = No
 
     Example:
         a = C.sequence.input_variable(10)
-        b = MultiHeadAttentionBlock(2, 10)(a, a, a, None)
+        b = MultiHeadAttentionBlock(2, 10)(a, a, a)
 
         assert b.shape == (10, )
 
     Arguments:
         num_heads (int): number of attention heads
         model_dim (int): number of hidden dim in final output of multi-head attention
-        map_ranks (tuple): first item is for query/key. Second is value. set 1 if input tensor
-          is an unpacked sequence, None if it is a sequence. Default None.
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
-        output_as_seq: output attended tensor as a sequence
 
     Returns:
         :class:`~cntk.ops.functions.Function`:
@@ -154,10 +143,8 @@ def TransformerEncoderBlock(num_heads: int, model_dim: int, obey_sequence_order:
     Arguments:
         num_heads (int): number of attention heads
         model_dim (int): number of hidden dim in final output of multi-head attention
-        map_rank: 1 if input_tensor is an unpacked sequence, None if sequence. Default None.
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
-        output_as_seq: output attended tensor as a sequence
 
     Returns:
         :class:`~cntk.ops.functions.Function`:
@@ -184,11 +171,8 @@ def TransformerDecoderBlock(num_heads: int, model_dim: int, obey_sequence_order:
     Arguments:
         num_heads (int): number of attention heads
         model_dim (int): number of hidden dim in final output of multi-head attention
-        is_encoded_seq (bool): is encoded tensor a sequence
-        map_rank: '1' if input tensor x is an unpacked sequence, 'None' if sequence. Default None.
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
-        output_as_seq: output attended tensor as a sequence
 
     Returns:
         :class:`~cntk.ops.functions.Function`:
@@ -215,10 +199,9 @@ def TransformerEncoder(n: int, num_heads: int, model_dim: int, obey_sequence_ord
 
     Example:
         a = C.sequence.input_variable(10)
-
         encoded = TransformerDecoder(3, 2, 10)(a)
 
-        assert encoded.shape == (-3, 10)
+        assert encoded.shape == (10, )
 
     Arguments:
         n (int): number of encoder blocks
@@ -226,7 +209,6 @@ def TransformerEncoder(n: int, num_heads: int, model_dim: int, obey_sequence_ord
         model_dim (int): number of hidden dim in final output of multi-head attention
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
-        output_as_seq: output attended tensor as a sequence
 
     Returns:
         :class:`~cntk.ops.functions.Function`:
@@ -253,11 +235,11 @@ def TransformerDecoder(n: int, num_heads: int, model_dim: int, obey_sequence_ord
 
     Example:
         a = C.sequence.input_variable(10)
-        encoded = C.input_variable((-1, 10)
+        encoded = C.sequence.input_variable(10)
 
-        decoded = TransformerDecoder(3, 2, 10, is_encoded_seq=False)(encoded, a)
+        decoded = TransformerDecoder(3, 2, 10)(encoded, a)
 
-        assert decoded.shape == (-3, 10)
+        assert decoded.shape == (10, )
 
     Arguments:
         n (int): number of decoder blocks
@@ -265,7 +247,6 @@ def TransformerDecoder(n: int, num_heads: int, model_dim: int, obey_sequence_ord
         model_dim (int): number of hidden dim in final output of multi-head attention
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
-        output_as_seq: output attended tensor as a sequence
 
     Returns:
         :class:`~cntk.ops.functions.Function`:
@@ -306,12 +287,12 @@ def Transformer(num_encoder_blocks: int = 6, num_decoder_blocks=6, num_heads_enc
         num_decoder_blocks: number of decoder blocks
         num_heads_encoder: number of encoder attention heads
         num_heads_decoder: number of decoder attention heads
-        model_dim: model output dimension (should be the same dimension as the transformer input)
+        encoder_model_dim: encoder model output dimension (should be the same dimension as the transformer input)
+        decoder_model_dim: decoder model output dimension (should be the same dimension as the transformer input)
         encoder_obey_sequence_order: if to allow self-attention to peek into future elements in sequence Default False.
         decoder_obey_sequence_order: if to allow self-attention to peak into future elements in sequence. Default True.
         max_seq_len_encoder: max sequence length in encoding sequence. Used for preventing attention peeking into future values.
         max_seq_len_decoder: max sequence length in decoding sequence. Used for preventing attention peeking into future values.
-        output_as_seq: transformer outputs as a sequence or unpacked tensor (no dynamic sequence axis)
 
     Returns:
         :class:`~cntk.ops.functions.Function`:

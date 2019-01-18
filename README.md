@@ -1,5 +1,5 @@
 # CNTKx
-Deep learning library that builds on and extends Microsoft [CNTK](https://github.com/Microsoft/CNTK). 
+Deep learning library that builds on and extends Microsoft Cognitive Toolkit [CNTK](https://github.com/Microsoft/CNTK). 
 This library is in active development, more models and pre-built components coming soon!
 
 ## Installation
@@ -9,6 +9,32 @@ cntk is a dependency to cntkx. Please get a working installation of cntk first. 
 
 
 ## News
+***2019-01-16.***
+#### Added Gaussian Window Attention Model
+Gaussian window attention model was first introduced by Alex Graves in 
+"Generating sequences with recurrent neural networks".
+
+It uses a mixture of gaussian windows to attend to 
+portions of the sequence as oppose to the widely used attention model introduced in 
+"Neural machine translation by jointly learning to align and translate" by Bahdanau, et al. that attends
+to the entire sequence all at once.
+
+Gaussian window attention is also directional in its attention on the context sequence. When modeling
+strongly ordered sequences, gaussian window attention will be a natural choice due to this inductive bias.
+
+    seq1 = C.Axis.new_unique_dynamic_axis('seq1')
+    seq2 = C.Axis.new_unique_dynamic_axis('seq2')
+
+    encoded = C.sequence.input_variable(30, sequence_axis=seq1)
+    query = C.sequence.input_variable(28, sequence_axis=seq2)
+
+    a = GaussianWindowAttention(10)(encoded, query)
+
+    assert a.shape == (30, )
+
+"Generating sequences with recurrent neural networks" can be found [here](https://arxiv.org/abs/1308.0850).
+"Neural machine translation by jointly learning to align and translate" can be found [here](https://arxiv.org/abs/1409.0473).
+
 ***2019-01-16.***
 #### Added Spatial Pyramid Pooling layer
 Spatial pyramid pooling layer is a pooling layer than returns a fixed length representation regardless of the 

@@ -1,6 +1,6 @@
 import cntk as C
 import numpy as np
-from cntk.layers import Dense, LayerNormalization, ResNetBlock
+from cntk.layers import Dense, LayerNormalization, ResNetBlock, Recurrence
 
 
 def ScaledDotProductAttention(obey_sequence_order: bool = None, max_seq_len: int = None):
@@ -311,3 +311,114 @@ def Transformer(num_encoder_blocks: int = 6, num_decoder_blocks=6, num_heads_enc
         return decoded
 
     return model
+
+
+def GaussianWindowAttention(nb_mixtures):
+    """
+    Implementation of the attention model found in "Generating sequences with recurrent neural networks" by Alex Graves.
+
+    Gaussian window attention uses a directional mixture of gaussian kernels as convolution/attention window.
+
+    For more details, the paper can be found in https://arxiv.org/abs/1308.0850
+
+    Example:
+        seq1 = C.Axis.new_unique_dynamic_axis('seq1')
+        seq2 = C.Axis.new_unique_dynamic_axis('seq2')
+
+        encoded = C.sequence.input_variable(30, sequence_axis=seq1)
+        query = C.sequence.input_variable(28, sequence_axis=seq2)
+
+        a = GaussianWindowAttention(10)(encoded, query)
+
+        assert a.shape == (30, )
+
+    Arguments:
+        nb_mixtures (int): number of gaussian mixtures to use for attention model
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
+    dense = Dense(shape=3 * nb_mixtures, activation=None, init=C.normal(0.075), name="GravesAttention")
+
+    def sequence_position(seq):
+
+        @C.Function
+        def count(a, b):
+            return a + 1 + b * 0
+
+        return Recurrence(count)(C.slice(seq, 0, 0, 1))  # {#, *] [1,]
+
+    def window_weight(a, b, k, u):
+        """
+        Calculate Phi is the window weight of character seq at position u of time t.
+        Function tested to be correct on 2018-25-02 using numpy equivalent
+
+        math:
+            phi = summation of mixtures { a * exp ( -b * (k - u) ^ 2 ) }
+
+        Args:
+            a: importance of window within the mixture. Not normalised and doesn't sum to one.
+            b: width of attention window
+            k: location of window
+            u: integer position of each item in sequence. Value from 1 to seq_length. (rank 2 tensor) [-3, 1]
+
+        Returns:
+            :class:`~cntk.ops.functions.Function`
+
+        """
+        # print(f"k shape: {k.shape}, u shape: {u.shape}")
+        phi = a * C.exp(-1 * b * C.square(k - u))
+        # print("internal phi shape:", phi.shape)
+        phi = C.swapaxes(C.reduce_sum(phi, axis=0))  # Reduce sum the mixture axis
+        # phi: [#, n] [*-c, 1]
+        return phi
+
+    @C.typemap
+    def gaussian_windows_attention_coefficients(abk, nb_mixtures):
+        """ Split into 3 equal tensor of dim nb_mixtures """
+        a = C.exp(C.slice(abk, 0, 0, nb_mixtures))
+        b = C.exp(C.slice(abk, 0, nb_mixtures, 2 * nb_mixtures))
+        k = C.exp(C.slice(abk, 0, 2 * nb_mixtures, 0))
+        k = Recurrence(C.plus)(k)
+
+        a = C.expand_dims(a, axis=-1)
+        b = C.expand_dims(b, axis=-1)
+        k = C.expand_dims(k, axis=-1)
+        return a, b, k
+
+    @C.Function
+    def attention(encoded, network):
+        abk = dense(network)
+        a, b, k = gaussian_windows_attention_coefficients(abk, nb_mixtures)
+        # print("abk shape:", a.shape, b.shape, k.shape)
+        # a, b, k: [#, n] [nb_mixture, 1]
+        # context: [#, c] [char_ohe]
+
+        encoded_unpacked = C.sequence.unpack(encoded, padding_value=0, no_mask_output=True)
+        # context_unpacked: [#] [*=c, char_ohe]
+        u = sequence_position(encoded)
+        # u: [#, c], [1]
+        u_values, u_valid = C.sequence.unpack(u, padding_value=0).outputs
+        # u_values: [#] [*=c]
+        # u_valid: [#] [*=c]
+        u_values_broadcast = C.swapaxes(C.sequence.broadcast_as(u_values, k))
+        # u_values_broadcast: [#, n] [1, *=c]
+        u_valid_broadcast = C.sequence.broadcast_as(C.reshape(u_valid, (1,), 1), k)
+        # u_valid_broadcast: [#, n] [*=c, 1] ~ shape verified correct at his point
+
+        # print("u_values_broadcast shape:", u_values_broadcast.shape)
+        # print("abk shape:", a.shape, b.shape, k.shape)
+        phi = window_weight(a, b, k, u_values_broadcast)
+        # phi: [#, n] [*=c, 1]
+        zero = C.constant(0)
+        phi = C.element_select(u_valid_broadcast, phi, zero, name="phi")
+        # phi: [#, n] [*=c, 1]
+        attended = C.reduce_sum(phi * C.sequence.broadcast_as(encoded_unpacked, phi), axis=0)
+        # [#, n] [1, char_ohe]
+        # print("attended_context shape:", attended_context.shape)
+        output = C.squeeze(attended, name="GaussianWindowAttention")
+        # [#, n] [char_ohe]
+        return output
+
+    return attention

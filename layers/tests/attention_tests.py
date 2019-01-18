@@ -1,7 +1,7 @@
 import cntk as C
 from cntkx.layers.models import Transformer, TransformerDecoder, TransformerEncoder, MultiHeadAttention
 from cntkx.layers.models import MultiHeadAttentionBlock, TransformerEncoderBlock, TransformerDecoderBlock
-from cntkx.layers.models import ScaledDotProductAttention
+from cntkx.layers.models import ScaledDotProductAttention, GaussianWindowAttention
 import numpy as np
 import pytest
 
@@ -498,3 +498,18 @@ def test_transformer2():
          np.random.random((8, 10)).astype(np.float32),]
 
     results = prediction.eval({encoding: m, decoding: n})
+
+
+def test_gaussian_window_attention():
+    seq1 = C.Axis.new_unique_dynamic_axis('seq1')
+    seq2 = C.Axis.new_unique_dynamic_axis('seq2')
+
+    encoded = C.sequence.input_variable(30, sequence_axis=seq1)
+    query = C.sequence.input_variable(28, sequence_axis=seq2)
+
+    a = GaussianWindowAttention(10)(encoded, query)
+
+    n = np.random.random((2, 10, 30)).astype(np.float32)
+    m = np.random.random((2, 15, 28)).astype(np.float32)
+
+    results = a.eval({encoded: n, query: m})

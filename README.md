@@ -9,7 +9,7 @@ cntk is a dependency to cntkx. Please get a working installation of cntk first. 
 
 
 ## News
-***2019-01-16.***
+***2019-01-18.***
 #### Added Gaussian Window Attention Model
 Gaussian window attention model was first introduced by Alex Graves in 
 "Generating sequences with recurrent neural networks".

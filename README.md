@@ -19,6 +19,8 @@ overwhelm-ing the model during training.
 
 For more details please refer to [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002)
 
+    import cntkx as Cx
+    
     Cx.focal_loss_with_softmax([[0, 0, 0.8, 0.2]], [[0, 0, 1, 0]]).eval()
     array([[0.31306446]], dtype=float32)
 
@@ -36,14 +38,17 @@ to the entire sequence all at once.
 
 Gaussian window attention is also directional in its attention on the context sequence. When modeling
 strongly ordered sequences, gaussian window attention will be a natural choice due to this inductive bias.
-
+    
+    import cntk as C
+    import cntkx as Cx
+    
     seq1 = C.Axis.new_unique_dynamic_axis('seq1')
     seq2 = C.Axis.new_unique_dynamic_axis('seq2')
 
     encoded = C.sequence.input_variable(30, sequence_axis=seq1)
     query = C.sequence.input_variable(28, sequence_axis=seq2)
 
-    a = GaussianWindowAttention(10)(encoded, query)
+    a = Cx.layers.GaussianWindowAttention(10)(encoded, query)
 
     assert a.shape == (30, )
 
@@ -58,10 +63,12 @@ a single full-image representation without fine-tuning. For more details on the 
 "Spatial Pyramid Pooling in Deep Convolutional Networks for Visual Recognition" by K. He, X. Zhang, S. Ren, J. Sun,
 link [here](https://arxiv.org/abs/1406.4729).
 
+    import cntk as C
+    import cntkx as Cx
 
     n = np.random.random((3, 3, 32, 32)).astype(np.float32)
     a = C.input_variable((3, 32, 32))
-    b = SpatialPyramidPooling((1, 2, 4))(a)
+    b = Cx.layers.SpatialPyramidPooling((1, 2, 4))(a)
 
     assert b.shape == (3 * (4 * 4 + 2 * 2 + 1),)  # representation not dependent on image size
 
@@ -71,6 +78,9 @@ link [here](https://arxiv.org/abs/1406.4729).
 Added sinusoidal positional embedding used in [Transformer](https://arxiv.org/abs/1706.03762). For an accessible
 explanation of transformer, you may look up [here](http://jalammar.github.io/illustrated-transformer/).
 
+    import cntk as C
+    import cntkx as Cx
+    
     a = C.sequence.input_variable(10)
     b = SinusoidalPositionalEmbedding()(a)
 
@@ -92,15 +102,21 @@ for Biomedical Image Segmentation"
 
 VGG example:
 
+    import cntk as C
+    import cntkx as Cx
+    
     a = C.input_variable((3, 64, 64))
-    b = VGG19(100)(a)
+    b = Cx.layers.VGG19(100)(a)
 
     assert b.shape == (100,)
 
 UNET example:
 
+    import cntk as C
+    import cntkx as Cx
+    
     a = C.input_variable((3, 512, 512))
-    b = UNET(num_classes=10, base_num_filters=64, pad=True)(a)
+    b = Cx.layers.UNET(num_classes=10, base_num_filters=64, pad=True)(a)
 
     assert b.shape == (10, 512, 512)
 
@@ -115,10 +131,13 @@ The architecture is based solely on attention mechanisms, dispensing with recurr
 More recently, [BERT](https://arxiv.org/abs/1810.04805) which broke almost all SOTA language task is also based on 
 transformer and self-attention.
 
+    import cntk as C
+    import cntkx as Cx
+    
     a = C.sequence.input_variable(512)
     b = C.sequence.input_variable(512)
 
-    transformer = Transformer()  # using default settings
+    transformer = Cx.layers.Transformer()  # using default settings
     decoded = transformer(a, b)
 
     assert decoded.shape == (512, )
@@ -131,8 +150,13 @@ highly optimized NVIDIA cuDNN LSTM implementation depending on the use case.
 
 More details please refer to the original paper [here](https://arxiv.org/abs/1611.01576).
 
+    import cntk as C
+    import cntkx as Cx
+    
     input_seq = C.sequence.input_variable(input_dim)
-    prediction_seq = QRNN(hidden_dim=50)(input_seq)
+    prediction_seq = Cx.layers.QRNN(hidden_dim=50)(input_seq)
+
+
 
 ***2018-12-07.***
 #### New sequence ops: `cntkx.ops.sequence.pad` and `cntkx.ops.sequence.length`
@@ -148,7 +172,10 @@ MDN are very useful when you need to map an input to several correct targets (ak
 Updated with Gaussian Mixture Density Network ops and loss function. Ops will allow you to extract mdn coefficients and sample from the network.
 
 More details on mdn can be found in this [paper](https://publications.aston.ac.uk/373/1/NCRG_94_004.pdf) by Christopher Bishop.
-
+    
+    import cntk as C
+    import cntkx as Cx
+    
     input_tensor = C.input_variable(1, name="input_tensor")
     target_tensor = C.input_variable(1, name="target_tensor")
     
@@ -157,5 +184,5 @@ More details on mdn can be found in this [paper](https://publications.aston.ac.u
     inner = Dense(50, activation=C.relu)(inner)
     prediction_tensor = Dense((ndim + 2) * nmix, activation=None)(inner)
     
-    sampled = sample_gaussian_mdn(prediction_tensor, nmix, ndim)  # sampling node
-    loss = gaussian_mdn_loss(prediction_tensor, target_tensor, nmix=nmix, ndim=ndim)  # loss function
+    sampled = Cx.sample_gaussian_mdn(prediction_tensor, nmix, ndim)  # sampling node
+    loss = Cx.gaussian_mdn_loss(prediction_tensor, target_tensor, nmix=nmix, ndim=ndim)  # loss function

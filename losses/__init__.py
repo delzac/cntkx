@@ -121,7 +121,7 @@ def binary_focal_loss(output, target, alpha=1., gamma=2., name=''):
     numbers of easy background examples or dataset with extreme class imbalance (e.g. 1:1000).
 
     This implementation will work in semantic segmentation of images i.e. output can
-    be a rank 2 tensor of shape (row, col)
+    be a rank 2 tensor of shape (row, col). Output will be correct even in edge case where entire image is background.
 
     Maths:
         Focal Loss = - alpha * (1 - p) ^ gamma * log ( p )

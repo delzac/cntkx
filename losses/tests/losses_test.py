@@ -83,3 +83,11 @@ def test_binary_focal_loss_image():
     bfl = Cx.binary_focal_loss(output, target, alpha=1, gamma=2).eval({output: o, target: t})
 
     np.testing.assert_array_less(bfl, bce)
+
+    o = np.random.random((1, 5, 5)).astype(np.float32)
+    t = np.zeros((1, 5, 5)).astype(np.float32)
+
+    bce = C.binary_cross_entropy(output, target).eval({output: o, target: t})
+    bfl = Cx.binary_focal_loss(output, target, alpha=1, gamma=0).eval({output: o, target: t})
+
+    np.testing.assert_almost_equal(bce, bfl, decimal=3)

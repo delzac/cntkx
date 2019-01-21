@@ -9,6 +9,21 @@ cntk is a dependency to cntkx. Please get a working installation of cntk first. 
 
 
 ## News
+***2019-01-21.***
+#### Added `Focal Loss` for multi-class and binary classification
+CNTK implementation of `Focal Loss` enables the training of highly accurate dense object detectors in the
+presence of vast numbers of easy background examples or dataset with extreme class imbalance (e.g. 1:1000).
+
+`Focal Loss` focuses training on a sparse set of hard examples and prevents the vast number of easy negatives from
+overwhelm-ing the model during training. 
+
+For more details please refer to [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002)
+
+    Cx.focal_loss_with_softmax([[0, 0, 0.8, 0.2]], [[0, 0, 1, 0]]).eval()
+    array([[0.31306446]], dtype=float32)
+
+
+
 ***2019-01-18.***
 #### Added Gaussian Window Attention Model
 Gaussian window attention model was first introduced by Alex Graves in 

@@ -30,6 +30,12 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
           year={2017}
         }
 
+    Examples:
+        input_tensor = C.sequence.input_variable(input_dim)
+
+        hidden = QRNN(window=2, hidden_dim=hidden_dim)(input_tensor)
+        prediction = Dense(1)(C.sequence.last(hidden))
+
     Arguments:
         window (`int`):  Defines the size of the convolutional window (how many previous
           tokens to look when computing the QRNN values). Defaults 1.
@@ -43,9 +49,10 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
 
     """
 
-    def FoPool(c, fz):
-        f = C.slice(fz, 0, 0, hidden_dim)
-        z = C.slice(fz, 0, hidden_dim, 2 * hidden_dim)
+    @C.Function
+    def f_pool(c, zf):
+        z = C.slice(zf, 0, 0, hidden_dim)
+        f = C.slice(zf, 0, hidden_dim, 2 * hidden_dim)
         return f * c + (1 - f) * z
 
     def model(input_tensor):
@@ -67,9 +74,9 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
         f = C.sigmoid(forget)
         o = C.sigmoid(output)
 
-        # FoPooling
-        c = Recurrence(FoPool)(C.splice(f, z))
-        h = o * c
+        # Pooling
+        c = Recurrence(f_pool)(C.splice(z, f))  # f pool
+        h = o * c  # o pool
 
         if return_full_state:
             return h, c
@@ -103,6 +110,15 @@ def SinusoidalPositionalEmbedding(min_timescale=1.0, max_timescale=1.0e4, name: 
     This implementation is equivalent to get_timing_signal_1d() in tensorflow's tensor2tensor:
         https://github.com/tensorflow/tensor2tensor/blob/23bd23b9830059fbc349381b70d9429b5c40a139/
           tensor2tensor/layers/common_attention.py
+
+    Example:
+        import cntk as C
+        import cntkx as Cx
+
+        a = C.sequence.input_variable(10)
+        b = Cx.layers.SinusoidalPositionalEmbedding()(a)
+
+        assert b.shape == (10, )
 
     Arguments:
         min_timescale (float): geometric sequence of timescales starting with min_timescale

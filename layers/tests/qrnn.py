@@ -3,6 +3,7 @@ from cntkx.layers import QRNN
 from cntk.layers import Dense, Recurrence, LSTM
 import numpy as np
 import random
+import time
 
 
 def generate_variable_10(nb_samples=1000, dim=3):
@@ -24,17 +25,18 @@ hidden_dim = 100
 input_tensor = C.sequence.input_variable(input_dim)
 target_tensor = C.input_variable(1)
 
-# hidden = QRNN(window=2, hidden_dim=hidden_dim)(input_tensor)
-hidden = Recurrence(LSTM(hidden_dim))(input_tensor)
+hidden = QRNN(window=2, hidden_dim=hidden_dim)(input_tensor)
+# hidden = Recurrence(LSTM(hidden_dim))(input_tensor)
 prediction = Dense(1)(C.sequence.last(hidden))
 
 loss = C.squared_error(prediction, target_tensor)
-sgd_m = C.momentum_sgd(prediction.parameters, 0.01, 0.912)
+sgd_m = C.momentum_sgd(prediction.parameters, 0.1, 0.912)
 trainer = C.Trainer(prediction, (loss,), [sgd_m])
 
 n_epoch = 50
 minibatch_size = 30
 
+start = time.time()
 for epoch in range(n_epoch):
 
     for i in range(0, len(x), minibatch_size):
@@ -46,7 +48,7 @@ for epoch in range(n_epoch):
 
         print(f"loss: {trainer.previous_minibatch_loss_average}")
 
-
+print(f"Training completed in {time.time() - start}s")
 n = np.random.randint(2, size=(6, input_dim)).astype(np.float32)
 print(prediction.eval({input_tensor: [n]}))
 print(n.sum())

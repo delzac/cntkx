@@ -1,5 +1,5 @@
 import cntk as C
-from cntkx.layers import QRNN, SinusoidalPositionalEmbedding, SpatialPyramidPooling
+from cntkx.layers import QRNN, SinusoidalPositionalEmbedding, SpatialPyramidPooling, GatedLinearUnit
 import numpy as np
 
 
@@ -74,3 +74,19 @@ def test_spatial_pyramid_pooling():
 
     assert b.shape == (3 * (5 * 5 + 3 * 3 + 1),)
     b.eval({a: n})
+
+
+def test_gated_linear_unit():
+    input_dim = 10
+    even_length = 10
+    odd_length = 15
+
+    a = C.sequence.input_variable(input_dim)
+    b = GatedLinearUnit(2, 20)(a)
+
+    assert b.shape == (20, )
+
+    n1 = np.random.random((odd_length, input_dim)).astype(np.float32)
+    n2 = np.random.random((even_length, input_dim)).astype(np.float32)
+
+    b.eval({a: [n1, n2]})

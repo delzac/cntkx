@@ -9,6 +9,21 @@ cntk is a dependency to cntkx. Please get a working installation of cntk first. 
 
 
 ## News
+***2019-02-02.***
+#### Added Gated Linear Unit / Gated CNN
+CNTK implementation of Gated Linear Unit (Gated CNN) founnd in Facebook AI Research Lab's paper:
+[Language Modeling with Gated Convolutional Networks](https://arxiv.org/abs/1612.08083).
+This paper applies a convolutional approach to language modelling with a novel Gated-CNN model.
+
+    import cntkx as Cx
+    import cntk as C
+    
+    seq = C.sequence.input_variable(56)
+    hidden = Cx.layers.GatedLinearUnit(window=2, hidden_dim=100)
+    
+    assert hidden.shape == (100, )
+
+
 ***2019-01-21.***
 #### Added `Focal Loss` for multi-class and binary classification
 CNTK implementation of `Focal Loss` enables the training of highly accurate dense object detectors in the

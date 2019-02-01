@@ -135,6 +135,7 @@ def SinusoidalPositionalEmbedding(min_timescale=1.0, max_timescale=1.0e4, name: 
         return p + x * 0 + 1
 
     def embedding(x):
+        assert x.shape[0] > 0, f"input tensor must have a defined shape, input shape is {x.shape}"
         dim = x.shape[0]
         num_timescales = dim // 2
         log_timescale_increment = (math.log(float(max_timescale) / float(min_timescale)) / (num_timescales - 1))
@@ -248,3 +249,47 @@ def SpatialPyramidPooling(bins: tuple, name=''):
         return C.squeeze(C.splice(*features), name=name)
 
     return spp
+
+
+def GatedLinearUnit(window: int = 2, hidden_dim: int = None, activation=C.sigmoid):
+    """
+    Gated Linear Unit or gated convolutional neural network is a finite context approach
+    through stacked convolutions, which can be  more  efficient  since  they  allow
+    parallelization over sequential tokens.
+
+    Context is captured through the stacking multiple gated linear units with window size more than one unlike
+    in QRNN where there is still an explicit recurrence/pooling relationship temporally.
+
+    Example:
+        a = C.sequence.input_variable(56)
+        b = Cx.layers.GatedLinearUnit(2, 100)(a)
+
+        assert b.shape == (100, )
+
+    Arguments:
+        window (`int`):  Defines the size of the convolutional window (how many previous
+          tokens to look when computing the gated linear unit values). Defaults 2.
+        hidden_dim (int): size of hidden output dim. Must be divisible by 2.
+        activation: gate function
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
+    assert hidden_dim % 2 == 0, "hidden dimension must be divisible by 2"
+
+    def inner(input_tensor):
+        filter_shape = (window,) + input_tensor.shape
+
+        input_sequence = input_tensor
+        if window > 1:
+            # to ensure causal relation is still preserved
+            input_sequence = Cx.sequence.pad(input_sequence, (window - 1, 0), constant_value=0)
+
+        conv_values = SequentialConvolution(filter_shape=filter_shape, num_filters=2 * hidden_dim, pad=False,
+                                            reduction_rank=0)(input_sequence) >> C.squeeze
+
+        outputs = C.slice(conv_values, 0, 0, hidden_dim) + activation(C.slice(conv_values, 0, hidden_dim, 2 * hidden_dim))
+        return outputs
+
+    return inner

@@ -27,7 +27,7 @@ def pad(x, pattern, mode=C.CONSTANT_PAD, constant_value=0, name=''):
 
     b, valid = C.sequence.unpack(x, padding_value=0).outputs
     c = C.pad(b, final_pattern, mode=mode, constant_value=constant_value)
-    seq_length = C.reduce_sum(valid) + C.Constant(sum(pattern))
+    seq_length = C.reduce_sum(valid, axis=0) + C.Constant(sum(pattern))
     d = C.to_sequence(c, seq_length, name=name)
     return d
 
@@ -38,11 +38,35 @@ def length(x, name=''):
     Calculates the sequence length of the tensor.
 
     Arguments:
-         x: input sequence tensor
-         name (str, optional): the name of the Function instance in the network
+        x: input sequence tensor
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
     """
 
-    def step(acc, a):
-        return 1 + acc + a * 0
+    mask = C.sequence.unpack(x, padding_value=0).outputs[1]
+    return C.reduce_sum(mask, axis=0, name=name)
 
-    return C.sequence.last(Recurrence(step)(C.slice(x, 0, 0, 1, name=name)))
+
+def position(x, name=''):
+    """ Returns the position index of every element in the sequence.
+
+    First element of sequence will have position value of 0.
+
+    Arguments:
+        x: input sequence tensor
+        name (str): name of function
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+        a sequence tensor of shape (1,) with value of 0 to `seq_length` depending on position
+    """
+    @C.Function
+    def pos(p, x):
+        return p + x * 0 + 1
+
+    # tensor op cannot be applied to sparse tensor
+    if x.is_sparse:
+        x = C.zeros_like(x)
+
+    return Recurrence(pos, initial_state=C.constant(-1), name=name)(C.slice(x, 0, 0, 1))

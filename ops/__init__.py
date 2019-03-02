@@ -95,7 +95,15 @@ def centre_crop_and_splice(larger_image, smaller_image):
 ##########################################################################
 # non linear and nn ops
 ##########################################################################
+@C.typemap
+def swish(x, name=''):
+    """ swish activation function first introduced in 'Searching for activation function' by Prajit et al.
+    Paper can be found in https://arxiv.org/abs/1710.05941 and https://arxiv.org/abs/1901.02671
 
+    It typically exhibits good performance in a variety of task in vision and nlp problems.
+    Can be used as a drop-in replace for relu.
+    """
+    return x * C.sigmoid(x, name=name)
 
 
 @C.typemap

@@ -2,9 +2,10 @@ import math
 import numpy as np
 import cntk as C
 import cntkx as Cx
+from cntkx.layers.blocks import WeightMaskedLSTM
 from cntk.default_options import default_override_or
 from cntk.layers.blocks import identity
-from cntk.layers import SequentialConvolution, Recurrence
+from cntk.layers import SequentialConvolution, Recurrence, Embedding, LayerNormalization, Dropout
 from cntk.layers import MaxPooling, Convolution2D
 
 
@@ -111,6 +112,8 @@ def SinusoidalPositionalEmbedding(min_timescale=1.0, max_timescale=1.0e4, name: 
         https://github.com/tensorflow/tensor2tensor/blob/23bd23b9830059fbc349381b70d9429b5c40a139/
           tensor2tensor/layers/common_attention.py
 
+    There are no learnable parameters in this embedding.
+
     Example:
         import cntk as C
         import cntkx as Cx
@@ -148,11 +151,11 @@ def SinusoidalPositionalEmbedding(min_timescale=1.0, max_timescale=1.0e4, name: 
         c = C.cos(scaled_time)
         signal = C.splice(s, c)
 
-        # last dim gets a 0 value is input_dim is odd
+        # last dim gets a 0 value if input_dim is odd
         if dim % 2 != 0:
             signal = C.pad(signal, [[0, 1]])
 
-        return C.plus(signal, x, name=name)
+        return C.layers.Label(name=name)(signal)
 
     return embedding
 
@@ -291,5 +294,183 @@ def GatedLinearUnit(window: int = 2, hidden_dim: int = None, activation=C.sigmoi
 
         outputs = C.slice(conv_values, 0, 0, hidden_dim) + activation(C.slice(conv_values, 0, hidden_dim, 2 * hidden_dim))
         return outputs
+
+    return inner
+
+
+def PositionalEmbedding(max_seq_length: int, hidden_dim: int, name: str = ''):
+    """ Learnable positional embedding
+
+    Example:
+        a = C.sequence.input_variable(5)
+        positional_embedding =
+
+    Arguments:
+        hidden_dim (int): dimension of the embedding vector
+        name (str): name of the layer
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+        Positional embedding vector of shape (`hidden_dim`, )
+    """
+
+    position_embeddings = Embedding(shape=hidden_dim, name=name)
+
+    def inner(x):
+        position_index = Cx.sequence.position(x)
+        pos = C.one_hot(position_index, max_seq_length, sparse_output=True)
+        embedded = position_embeddings(pos)
+        return embedded
+
+    return inner
+
+
+def BertEmbeddings(max_seq_length, hidden_dim: int, dropout_rate: float, pretrianed_bert=''):
+    """ Construct the embeddings from word, position and token_type embeddings that is used in BERT.
+    Paper can be found at https://arxiv.org/abs/1810.04805 (BERT: Pre-training of Deep Bidirectional
+    Transformers for Language Understanding)
+
+    Arguments:
+        max_seq_length (int): max sequence length possible for positional embedding
+        hidden_dim (int): dimension of the embedding vector
+        dropout_rate (float): probability of dropout
+        pretrianed_bert (str): file path to bert pretrained model file
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+        Embedding vector of shape (`hidden_dim`, )
+
+    """
+
+    word_embeddings = Embedding(shape=hidden_dim, name='word_embeddings')
+    position_embeddings = PositionalEmbedding(max_seq_length, hidden_dim=hidden_dim, name='position_embeddings')
+    token_type_embeddings = Embedding(shape=hidden_dim, name='token_type_embeddings')  # aka 'segment embedding'
+
+    layer_norm = LayerNormalization(name='LayerNorm')
+    dropout = Dropout(dropout_rate)
+
+    @C.Function
+    def position(p, x):
+        return p + x * 0 + 1
+
+    def inner(text_tensor, token_type_tensor):
+        embedded_word_tensors = word_embeddings(text_tensor)
+        embedded_token_type_tensors = token_type_embeddings(token_type_tensor)
+        embedded_position_tensors = position_embeddings(text_tensor)
+
+        embedded_tensor = embedded_word_tensors + embedded_position_tensors + embedded_token_type_tensors
+        embedded_tensor = layer_norm(embedded_tensor)
+        embedded_tensor = dropout(embedded_tensor)
+        return embedded_tensor
+
+    return inner
+
+
+def WeightDroppedLSTM(shape, dropconnect_rate: float = None, variational_dropout_rate_input: float = None,
+                      variational_dropout_rate_output: float = None,
+                      activation=default_override_or(C.tanh), use_peepholes=default_override_or(False),
+                      init=default_override_or(C.glorot_uniform()), init_bias=default_override_or(0),
+                      enable_self_stabilization=default_override_or(False), go_backwards=default_override_or(False),
+                      initial_state=default_override_or(0), return_full_state=False, name=''):
+    """ LSTM recurence layer with DropConnect and variational dropout applied
+
+    Weight dropped is implemented as DropConnect of hidden-to-hidden weight matrics, not the dropout of
+    hidden states (aka variational dropout).
+
+    For more details on Weight-Dropped LSTM, please read "regularizing and optimizing LSTM language models"
+    by S. Merity, at el (https://arxiv.org/abs/1708.02182)
+
+    Weight masked LSTM step function is available in cntkx.layers.blocks as WeightMaskedLSTM.
+
+    Note that in typical usage, the output of the last `WeightDroppedLSTM` layer in the rnn layer stack
+    should not be variationally dropped out (i.e. variational_dropout_rate_output should be set to zero).
+    This is advice is consistent with salesforce's implementation of awd-lstm
+    (https://github.com/salesforce/awd-lstm-lm/blob/master/model.py)
+
+    Examples:
+        a = C.sequence.input_variable(10)
+        b = Cx.layers.WeightDroppedLSTM(20, 0.1, 0.1, 0.1)(a)
+
+        assert b.shape == (20, )
+
+    Arguments:
+        shape (`int` or `tuple` of `ints`): vector or tensor dimension of the output of this layer
+        dropconnect_rate (float): probability of dropping out an element in dropconnect
+        variational_dropout_rate_input (float): probability of dropping out an input element
+        variational_dropout_rate_output (float): probability of dropping out an output element
+        activation (:class:`~cntk.ops.functions.Function`, defaults to :func:`~cntk.ops.tanh`): function to apply at the end, e.g. `relu`
+        use_peepholes (bool, defaults to `False`):
+        init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to `glorot_uniform`): initial value of weights `W`
+        init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
+        enable_self_stabilization (bool, defaults to `False`): if `True` then add a :func:`~cntk.layers.blocks.Stabilizer`
+         to all state-related projections (but not the data input)
+        go_backwards (bool, defaults to ``False``): if ``True`` then run the recurrence from the end of the sequence to the start.
+        initial_state (scalar or tensor without batch dimension; or a tuple thereof):
+          the initial value for the state. This can be a constant or a learnable parameter.
+          In the latter case, if the step function has more than 1 state variable,
+          this parameter must be a tuple providing one initial state for every state variable.
+        return_full_state (bool, defaults to ``False``): if ``True`` and the step function has more than one
+          state variable, then the layer returns a all state variables (a tuple of sequences);
+          whereas if not given or ``False``, only the first state variable is returned to the caller.
+        name (str, defaults to ''): the name of the Function instance in the network
+
+    """
+    dropout = C.layers.Dropout(dropconnect_rate, name='dropout')
+    variational_dropout_input = VariationalDropout(variational_dropout_rate_input) if variational_dropout_rate_input > 0 else None
+    variational_dropout_output = VariationalDropout(variational_dropout_rate_output) if variational_dropout_rate_output > 0 else None
+
+    lstm = WeightMaskedLSTM(shape=shape, activation=activation, use_peepholes=use_peepholes, init=init, init_bias=init_bias,
+                            enable_self_stabilization=enable_self_stabilization, name=name + '_WeightMaskedLSTM_cell')
+
+    @C.Function
+    def inner(x):
+
+        # mask for hidden-to-hidden weight that is the same for all temporal steps
+        dummy = C.slice(C.sequence.first(x), 0, 0, 1)
+        drop_connect = dropout(C.zeros_like(lstm.parameters[-1]) * dummy + C.constant(1))
+        drop_connect = C.sequence.broadcast_as(drop_connect, x)
+
+        @C.Function
+        def weight_dropped_lstm(h, c, x):
+
+            a, b, __ = lstm(h, c, drop_connect, x).outputs
+            return a, b
+
+        x = variational_dropout_input(x) if variational_dropout_input else x
+        output = Recurrence(weight_dropped_lstm, go_backwards=go_backwards, initial_state=initial_state,
+                            return_full_state=return_full_state, name=name)(x)
+
+        # dropout applied outside of rnn as rnn hidden-to-hidden already regularised by dropconnect
+        output = variational_dropout_output(output) if variational_dropout_output else output
+        return output
+
+    return inner
+
+
+def VariationalDropout(dropout_rate: float, name=''):
+    """ Variational dropout uses the same dropout mask at each time step (i.e. across the dynamic sequence axis)
+
+    Example:
+        a = C.sequence.input_variable(10)
+        b = VariationalDropout(0.1)(a)
+
+        assert b.shape == a.shape
+
+    Arguments:
+        dropout_rate (float): probability of dropping out an element
+        name (str, defaults to ''): the name of the Function instance in the network
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the operation to it
+
+    """
+    dropout = C.layers.Dropout(dropout_rate, name=name)
+
+    @C.BlockFunction('VariationalDropout', name)
+    def inner(x):
+        mask = dropout(C.sequence.first(x))
+        mask = C.sequence.broadcast_as(mask, x)
+        return mask * x
 
     return inner

@@ -9,6 +9,38 @@ cntk is a dependency to cntkx. Please get a working installation of cntk first. 
 
 
 ## News
+***2019-03-02.***
+#### Added `VariationalDrpoout` and `WeightDroppedLSTM`
+CNTK implementation of `VariationalDrpoout` found in 
+[A Theoretically Grounded Application of Dropout in Recurrent Neural Networks](https://arxiv.org/abs/1512.05287)
+and `WeightDroppedLSTM` proposed in a salesforce research paper 
+[Regularizing and Optimizing LSTM Language Models](https://arxiv.org/abs/1708.02182).
+
+`WeightDroppedLSTM` is a regularised LSTM that uses DropConnect on hidden-to-hidden weights as a form of recurrent
+regularisation. It also include application of variational dropout on the inputs and outputs of the recurrent units
+for further regularisation.
+
+`VariationalDrpoout` is a regularisation that uses same dropout mask at each time step 
+(i.e. across the dynamic sequence axis) as opposed to the naive application of `C.layers.Dropout` to a sequence
+which will result in a different dropout mask for every tensor along the sequence axis.
+
+
+    import cntkx as Cx
+    import cntk as C
+    
+    seq = C.sequence.input_variable(56)
+    hidden = Cx.layers.WeightDroppedLSTM(100,
+                                         dropconnect_rate=0.1,
+                                         variational_dropout_rate_input=0.1,
+                                         variational_dropout_rate_output=0.1)(seq)
+    
+    assert hidden.shape == (100, )
+    
+    seq_dropped = VariationalDropout(0.1)(seq)
+    
+    assert seq_dropped.shape == seq.shape
+
+
 ***2019-02-02.***
 #### Added Gated Linear Unit / Gated CNN
 CNTK implementation of Gated Linear Unit (Gated CNN) founnd in Facebook AI Research Lab's paper:
@@ -19,7 +51,7 @@ This paper applies a convolutional approach to language modelling with a novel G
     import cntk as C
     
     seq = C.sequence.input_variable(56)
-    hidden = Cx.layers.GatedLinearUnit(window=2, hidden_dim=100)
+    hidden = Cx.layers.GatedLinearUnit(window=2, hidden_dim=100)(seq)
     
     assert hidden.shape == (100, )
 

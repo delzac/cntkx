@@ -1,5 +1,6 @@
 import cntk as C
 from cntkx.layers import QRNN, SinusoidalPositionalEmbedding, SpatialPyramidPooling, GatedLinearUnit
+from cntkx.layers import VariationalDropout, WeightDroppedLSTM
 import numpy as np
 
 
@@ -88,5 +89,38 @@ def test_gated_linear_unit():
 
     n1 = np.random.random((odd_length, input_dim)).astype(np.float32)
     n2 = np.random.random((even_length, input_dim)).astype(np.float32)
+
+    b.eval({a: [n1, n2]})
+
+
+def test_variational_dropout():
+    a = C.sequence.input_variable(10)
+    b = VariationalDropout(0.1)(a)
+
+    assert b.shape == a.shape
+
+    n1 = np.random.random((3, 10)).astype(np.float32)
+    n2 = np.random.random((6, 10)).astype(np.float32)
+
+    b.eval({a: [n1, n2]})
+
+
+def test_weight_dropped_lstm():
+    a = C.sequence.input_variable(10)
+    b = WeightDroppedLSTM(20, 0.1, 0.1, 0.1)(a)
+
+    assert b.shape == (20, )
+
+    n1 = np.random.random((3, 10)).astype(np.float32)
+    n2 = np.random.random((6, 10)).astype(np.float32)
+
+    b.eval({a: [n1, n2]})
+
+    b = WeightDroppedLSTM(20, 0, 0, 0)(a)
+
+    assert b.shape == (20,)
+
+    n1 = np.random.random((3, 10)).astype(np.float32)
+    n2 = np.random.random((6, 10)).astype(np.float32)
 
     b.eval({a: [n1, n2]})

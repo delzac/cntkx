@@ -9,6 +9,42 @@ cntk is a dependency to cntkx. Please get a working installation of cntk first. 
 
 
 ## News
+***2019-03-06.***
+#### Added `PositionalEmbedding`, `BertEmbeddings` and `PreTrainedBertEmbeddings`
+CNTK implementation of `PositionalEmbedding`, `BertEmbeddings` and tf-to-cntk `PreTrainedBertEmbeddings`.
+BERT is a state-of-the-art language model from Google AI, more details can be found in
+[BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805).
+
+Google AI's pre-trained BERT tensorflow model can be downloaded [here](https://github.com/google-research/bert).
+Tensorflow would need to be installed in your environment if you intend to use `PreTrainedBertEmbeddings`, which
+takes a tensorflow model and convert it cntk.
+
+Example for `PositionalEmbedding`
+
+    a = C.sequence.input_variable(12)
+    b = PositionalEmbedding(max_seq_length, hidden_dim)(a)
+
+    assert b.shape == (hidden_dim, )
+
+Example for `BertEmbeddings`
+
+    text_tensor = C.sequence.input_variable(100)
+    token_type_tensor = C.sequence.input_variable(2)
+    b = BertEmbeddings(max_seq_length, hidden_dim, 0.1)(text_tensor, token_type_tensor)
+
+    assert b.shape == (hidden_dim, )
+
+Example for `PreTrainedBertEmbeddings`
+
+    text_tensor = C.sequence.input_variable(30522)
+    token_type_tensor = C.sequence.input_variable(2)
+    filepath_to_tf_bert_model = "YOURFILEPATH"
+    embeddings = PreTrainedBertEmbeddings(filepath_to_tf_bert_model, 0.1, False)
+    b = embeddings(text_tensor, token_type_tensor)
+    
+    assert b.shape == (768, )
+
+    
 ***2019-03-02.***
 #### Added `VariationalDrpoout` and `WeightDroppedLSTM`
 CNTK implementation of `VariationalDrpoout` found in 

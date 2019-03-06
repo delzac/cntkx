@@ -1,6 +1,7 @@
 import cntk as C
 from cntkx.layers import QRNN, SinusoidalPositionalEmbedding, SpatialPyramidPooling, GatedLinearUnit
-from cntkx.layers import VariationalDropout, WeightDroppedLSTM
+from cntkx.layers import VariationalDropout, WeightDroppedLSTM, BertEmbeddings, PositionalEmbedding
+from cntkx.layers import PreTrainedBertEmbeddings
 import numpy as np
 
 
@@ -124,3 +125,51 @@ def test_weight_dropped_lstm():
     n2 = np.random.random((6, 10)).astype(np.float32)
 
     b.eval({a: [n1, n2]})
+
+
+def test_positional_embedding():
+    max_seq_length = 100
+    hidden_dim = 120
+    a = C.sequence.input_variable(12)
+    b = PositionalEmbedding(max_seq_length, hidden_dim)(a)
+
+    assert b.shape == (hidden_dim, )
+
+    n1 = np.random.random((3, 12)).astype(np.float32)
+    n2 = np.random.random((6, 12)).astype(np.float32)
+    b.eval({a: [n1, n2]})
+
+
+def test_bert_embeddings():
+    max_seq_length = 512
+    hidden_dim = 768
+
+    text_tensor = C.sequence.input_variable(100)
+    token_type_tensor = C.sequence.input_variable(2)
+    b = BertEmbeddings(max_seq_length, hidden_dim, 0.1)(text_tensor, token_type_tensor)
+
+    assert b.shape == (hidden_dim, )
+
+    n1 = np.random.random((3, 100)).astype(np.float32)
+    n2 = np.random.random((6, 100)).astype(np.float32)
+
+    m1 = np.random.random((3, 2)).astype(np.float32)
+    m2 = np.random.random((6, 2)).astype(np.float32)
+    b.eval({text_tensor: [n1, n2], token_type_tensor: [m1, m2]})
+
+
+def test_pretrained_bert_embeddings():
+    text_tensor = C.sequence.input_variable(30522)
+    token_type_tensor = C.sequence.input_variable(2)
+    filepath_to_tf_bert_model = "../../../pretrained models/BERT/uncased/bert_model.ckpt"
+    embeddings = PreTrainedBertEmbeddings(filepath_to_tf_bert_model, 0.1, False)
+    b = embeddings(text_tensor, token_type_tensor)
+
+    assert b.shape == (768, )
+
+    n1 = np.random.random((3, 30522)).astype(np.float32)
+    n2 = np.random.random((6, 30522)).astype(np.float32)
+
+    m1 = np.random.random((3, 2)).astype(np.float32)
+    m2 = np.random.random((6, 2)).astype(np.float32)
+    b.eval({text_tensor: [n1, n2], token_type_tensor: [m1, m2]})

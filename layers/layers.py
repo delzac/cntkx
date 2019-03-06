@@ -298,7 +298,8 @@ def GatedLinearUnit(window: int = 2, hidden_dim: int = None, activation=C.sigmoi
     return inner
 
 
-def PositionalEmbedding(max_seq_length: int, hidden_dim: int, name: str = ''):
+def PositionalEmbedding(max_seq_length: int, hidden_dim: int, init=default_override_or(C.glorot_uniform()),
+                        weights=None, name: str = ''):
     """ Learnable positional embedding
 
     Example:
@@ -306,7 +307,11 @@ def PositionalEmbedding(max_seq_length: int, hidden_dim: int, name: str = ''):
         positional_embedding =
 
     Arguments:
+        max_seq_length (int): max sequence length embeddable
         hidden_dim (int): dimension of the embedding vector
+        init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): (learnable embedding only) initial value of weights `E`
+        weights (NumPy array, mutually exclusive with ``init``, defuats to `None`): (user-supplied embedding only) the lookup table.
+          The matrix rows are the embedding vectors, ``weights[i,:]`` being the embedding that corresponds to input category `i`.
         name (str): name of the layer
 
     Returns:
@@ -314,18 +319,24 @@ def PositionalEmbedding(max_seq_length: int, hidden_dim: int, name: str = ''):
         Positional embedding vector of shape (`hidden_dim`, )
     """
 
-    position_embeddings = Embedding(shape=hidden_dim, name=name)
+    position_embeddings = Embedding(shape=hidden_dim, init=init, weights=weights, name=name)
 
+    @C.BlockFunction('PositionalEmbedding', name)
     def inner(x):
         position_index = Cx.sequence.position(x)
-        pos = C.one_hot(position_index, max_seq_length, sparse_output=True)
+        pos = C.one_hot(position_index, max_seq_length, sparse_output=True) >> C.squeeze
         embedded = position_embeddings(pos)
         return embedded
 
     return inner
 
 
-def BertEmbeddings(max_seq_length, hidden_dim: int, dropout_rate: float, pretrianed_bert=''):
+def BertEmbeddings(max_seq_length, hidden_dim: int = None, dropout_rate: float = None,
+                   word_embed_init=default_override_or(C.glorot_uniform()), word_embed_weights=None,
+                   position_embed_init=default_override_or(C.glorot_uniform()), position_embed_weights=None,
+                   token_type_embed_init=default_override_or(C.glorot_uniform()), token_type_embed_weights=None,
+                   layer_norm_init_scale=1, layer_norm_init_bias=0,
+                   name=''):
     """ Construct the embeddings from word, position and token_type embeddings that is used in BERT.
     Paper can be found at https://arxiv.org/abs/1810.04805 (BERT: Pre-training of Deep Bidirectional
     Transformers for Language Understanding)
@@ -334,6 +345,8 @@ def BertEmbeddings(max_seq_length, hidden_dim: int, dropout_rate: float, pretria
         max_seq_length (int): max sequence length possible for positional embedding
         hidden_dim (int): dimension of the embedding vector
         dropout_rate (float): probability of dropout
+        layer_norm_init_scale (float): initial value for the ``scale`` parameter
+        layer_norm_init_bias (float): initial value for the ``bias`` parameter
         pretrianed_bert (str): file path to bert pretrained model file
 
     Returns:
@@ -341,18 +354,14 @@ def BertEmbeddings(max_seq_length, hidden_dim: int, dropout_rate: float, pretria
         Embedding vector of shape (`hidden_dim`, )
 
     """
+    word_embeddings = Embedding(shape=hidden_dim, init=word_embed_init, weights=word_embed_weights, name='word_embeddings')
+    position_embeddings = PositionalEmbedding(max_seq_length, hidden_dim=hidden_dim, init=position_embed_init, weights=position_embed_weights, name='position_embeddings')
+    token_type_embeddings = Embedding(shape=hidden_dim, init=token_type_embed_init, weights=token_type_embed_weights, name='token_type_embeddings')  # aka 'segment embedding'
 
-    word_embeddings = Embedding(shape=hidden_dim, name='word_embeddings')
-    position_embeddings = PositionalEmbedding(max_seq_length, hidden_dim=hidden_dim, name='position_embeddings')
-    token_type_embeddings = Embedding(shape=hidden_dim, name='token_type_embeddings')  # aka 'segment embedding'
-
-    layer_norm = LayerNormalization(name='LayerNorm')
+    layer_norm = LayerNormalization(initial_scale=layer_norm_init_scale, initial_bias=layer_norm_init_bias, name='LayerNorm')
     dropout = Dropout(dropout_rate)
 
-    @C.Function
-    def position(p, x):
-        return p + x * 0 + 1
-
+    @C.BlockFunction('BertEmbeddings', name)
     def inner(text_tensor, token_type_tensor):
         embedded_word_tensors = word_embeddings(text_tensor)
         embedded_token_type_tensors = token_type_embeddings(token_type_tensor)
@@ -364,6 +373,64 @@ def BertEmbeddings(max_seq_length, hidden_dim: int, dropout_rate: float, pretria
         return embedded_tensor
 
     return inner
+
+
+def PreTrainedBertEmbeddings(tf_bert_model_filepath: str, dropout_rate: float = None, learnable: bool = False):
+    """ Use pre-trained tensorflow bert model to initialise the model
+
+    Arguments:
+        tf_bert_model_filepath (str): file path to the tensorflow model
+        dropout_rate (float): probability of dropping out an element
+        learnable (bool): True if training of embeddings is desired. Defaults to False.
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+        TF to CNTK Pre-trained Bert Embeddings vector
+    """
+
+    try:
+        import tensorflow as tf
+    except ImportError:
+        raise ImportError("Loading a TensorFlow models in CNTK, requires TensorFlow to be installed. Please see "
+                          "https://www.tensorflow.org/install/ for installation instructions.")
+
+    bert_embedding = 'bert/embeddings/'
+    layer_names = [f'{bert_embedding}LayerNorm/beta',
+                   f'{bert_embedding}LayerNorm/gamma',
+                   f'{bert_embedding}position_embeddings',
+                   f'{bert_embedding}token_type_embeddings',
+                   f'{bert_embedding}word_embeddings']
+
+    variables_meta = [meta for meta in tf.train.list_variables(tf_bert_model_filepath) if meta[0] in layer_names]
+    pretrained_weights = [tf.train.load_variable(tf_bert_model_filepath, meta[0]) for meta in variables_meta]
+    pretrained_variables = [(name, shape, weight) for weight, (name, shape) in zip(pretrained_weights, variables_meta)]
+
+    layernorm_beta_embed_variables = pretrained_variables[0]  # bias
+    layernorm_gamma_embed_variables = pretrained_variables[1]  # scale
+    position_embed_variables = pretrained_variables[2]
+    token_type_embed_variables = pretrained_variables[3]
+    word_embed_variables = pretrained_variables[4]
+
+    if not learnable:
+        pretrained_bert_embedding = BertEmbeddings(max_seq_length=position_embed_variables[1][0],
+                                                   hidden_dim=None,
+                                                   dropout_rate=dropout_rate,
+                                                   word_embed_weights=word_embed_variables[-1],
+                                                   position_embed_weights=position_embed_variables[-1],
+                                                   token_type_embed_weights=token_type_embed_variables[-1],
+                                                   layer_norm_init_scale=layernorm_gamma_embed_variables[-1],
+                                                   layer_norm_init_bias=layernorm_beta_embed_variables[-1])
+    else:
+        pretrained_bert_embedding = BertEmbeddings(max_seq_length=position_embed_variables[1][0],
+                                                   hidden_dim=None,
+                                                   dropout_rate=dropout_rate,
+                                                   word_embed_init=word_embed_variables[-1],
+                                                   position_embed_init=position_embed_variables[-1],
+                                                   token_type_embed_init=token_type_embed_variables[-1],
+                                                   layer_norm_init_scale=layernorm_gamma_embed_variables[-1],
+                                                   layer_norm_init_bias=layernorm_beta_embed_variables[-1])
+
+    return pretrained_bert_embedding
 
 
 def WeightDroppedLSTM(shape, dropconnect_rate: float = None, variational_dropout_rate_input: float = None,

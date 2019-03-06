@@ -49,13 +49,13 @@ def test_erf():
     ans = np.array([[0], [0.022564575], [0.045111106], [0.067621594], [0.090078126], [0.112462916]])
     results = b.eval({a: n})
 
-    np.testing.assert_almost_equal(np.array(results), ans)
+    np.testing.assert_almost_equal(np.array(results), ans, decimal=6)
 
     a = C.input_variable(6)
     b = erf(a)
 
-    n = np.array([[0, 0.02, 0.04, 0.06, 0.08, 0.1],], dtype=np.float32)
-    ans = np.array([[0, 0.022564575, 0.045111106, 0.067621594, 0.090078126, 0.112462916],])
+    n = np.array([[0, 0.02, 0.04, 0.06, 0.08, 0.1], ], dtype=np.float32)
+    ans = np.array([[0, 0.022564575, 0.045111106, 0.067621594, 0.090078126, 0.112462916], ])
     results = b.eval({a: n})
 
-    np.testing.assert_almost_equal(np.array(results), ans)
+    np.testing.assert_almost_equal(np.array(results), ans, decimal=6)

@@ -13,7 +13,7 @@ def test_focal_loss():
     fl = Cx.focal_loss_with_softmax([[0, 0, 0.8, 0.2]], [[0, 0, 1, 0]], gamma=2).eval()
 
     np.testing.assert_array_less(fl, ce)
-    np.testing.assert_equal(fl, np.array([[0.31306446]], dtype=np.float32))
+    np.testing.assert_almost_equal(fl, np.array([[0.31306446]], dtype=np.float32), decimal=6)
 
     ce = C.cross_entropy_with_softmax([[0, 0, 0.2, 0.8]], [[0, 0, 1, 0]]).eval()
     fl = Cx.focal_loss_with_softmax([[0, 0, 0.2, 0.8]], [[0, 0, 1, 0]]).eval()
@@ -90,4 +90,4 @@ def test_binary_focal_loss_image():
     bce = C.binary_cross_entropy(output, target).eval({output: o, target: t})
     bfl = Cx.binary_focal_loss(output, target, alpha=1, gamma=0).eval({output: o, target: t})
 
-    np.testing.assert_almost_equal(bce, bfl, decimal=3)
+    np.testing.assert_almost_equal(bce, bfl, decimal=2)

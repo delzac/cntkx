@@ -5,8 +5,9 @@ import cntkx as Cx
 from cntkx.layers.blocks import WeightMaskedLSTM
 from cntk.default_options import default_override_or
 from cntk.layers.blocks import identity
-from cntk.layers import SequentialConvolution, Recurrence, Embedding, LayerNormalization, Dropout
+from cntk.layers import SequentialConvolution, Recurrence, Embedding, Dropout, Dense
 from cntk.layers import MaxPooling, Convolution2D
+from .blocks import _INFERRED
 
 
 def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=False):
@@ -319,7 +320,7 @@ def PositionalEmbedding(max_seq_length: int, hidden_dim: int, init=default_overr
         Positional embedding vector of shape (`hidden_dim`, )
     """
 
-    position_embeddings = Embedding(shape=hidden_dim, init=init, weights=weights, name=name)
+    position_embeddings = Embedding(shape=hidden_dim, init=init, weights=weights, name='PE')
 
     @C.BlockFunction('PositionalEmbedding', name)
     def inner(x):
@@ -335,7 +336,8 @@ def BertEmbeddings(max_seq_length, hidden_dim: int = None, dropout_rate: float =
                    word_embed_init=default_override_or(C.glorot_uniform()), word_embed_weights=None,
                    position_embed_init=default_override_or(C.glorot_uniform()), position_embed_weights=None,
                    token_type_embed_init=default_override_or(C.glorot_uniform()), token_type_embed_weights=None,
-                   layer_norm_init_scale=1, layer_norm_init_bias=0,
+                   layer_norm_init_scale=1, layer_norm_weights_scale=None,
+                   layer_norm_init_bias=0, layer_norm_weights_bias=None,
                    name=''):
     """ Construct the embeddings from word, position and token_type embeddings that is used in BERT.
     Paper can be found at https://arxiv.org/abs/1810.04805 (BERT: Pre-training of Deep Bidirectional
@@ -347,19 +349,20 @@ def BertEmbeddings(max_seq_length, hidden_dim: int = None, dropout_rate: float =
         dropout_rate (float): probability of dropout
         layer_norm_init_scale (float): initial value for the ``scale`` parameter
         layer_norm_init_bias (float): initial value for the ``bias`` parameter
-        pretrianed_bert (str): file path to bert pretrained model file
 
     Returns:
         :class:`~cntk.ops.functions.Function`:
         Embedding vector of shape (`hidden_dim`, )
 
     """
-    word_embeddings = Embedding(shape=hidden_dim, init=word_embed_init, weights=word_embed_weights, name='word_embeddings')
-    position_embeddings = PositionalEmbedding(max_seq_length, hidden_dim=hidden_dim, init=position_embed_init, weights=position_embed_weights, name='position_embeddings')
-    token_type_embeddings = Embedding(shape=hidden_dim, init=token_type_embed_init, weights=token_type_embed_weights, name='token_type_embeddings')  # aka 'segment embedding'
+    word_embeddings = Embedding(shape=hidden_dim, init=word_embed_init, weights=word_embed_weights, name='bert/embeddings/word_embeddings')
+    position_embeddings = PositionalEmbedding(max_seq_length, hidden_dim=hidden_dim, init=position_embed_init, weights=position_embed_weights, name='bert/embeddings/position_embeddings')
+    token_type_embeddings = Embedding(shape=hidden_dim, init=token_type_embed_init, weights=token_type_embed_weights, name='bert/embeddings/token_type_embeddings')  # aka 'segment embedding'
 
-    layer_norm = LayerNormalization(initial_scale=layer_norm_init_scale, initial_bias=layer_norm_init_bias, name='LayerNorm')
-    dropout = Dropout(dropout_rate)
+    layer_norm = LayerNormalization(initial_scale=layer_norm_init_scale, initial_bias=layer_norm_init_bias,
+                                    weights_scale=layer_norm_weights_scale, weights_bias=layer_norm_weights_bias,
+                                    name='bert/embeddings/LayerNorm')
+    dropout = Dropout(dropout_rate, name='bert/embeddings/dropout')
 
     @C.BlockFunction('BertEmbeddings', name)
     def inner(text_tensor, token_type_tensor):
@@ -377,6 +380,11 @@ def BertEmbeddings(max_seq_length, hidden_dim: int = None, dropout_rate: float =
 
 def PreTrainedBertEmbeddings(tf_bert_model_filepath: str, dropout_rate: float = None, learnable: bool = False):
     """ Use pre-trained tensorflow bert model to initialise the model
+
+    Currently it is tested to work with:
+        - `BERT-Base, Uncased`, uncased_L-12_H-768_A-12
+
+    Models can be downloaded at https://github.com/google-research/bert
 
     Arguments:
         tf_bert_model_filepath (str): file path to the tensorflow model
@@ -418,11 +426,11 @@ def PreTrainedBertEmbeddings(tf_bert_model_filepath: str, dropout_rate: float = 
                                                    word_embed_weights=word_embed_variables[-1],
                                                    position_embed_weights=position_embed_variables[-1],
                                                    token_type_embed_weights=token_type_embed_variables[-1],
-                                                   layer_norm_init_scale=layernorm_gamma_embed_variables[-1],
-                                                   layer_norm_init_bias=layernorm_beta_embed_variables[-1])
+                                                   layer_norm_weights_scale=layernorm_gamma_embed_variables[-1],
+                                                   layer_norm_weights_bias=layernorm_beta_embed_variables[-1])
     else:
         pretrained_bert_embedding = BertEmbeddings(max_seq_length=position_embed_variables[1][0],
-                                                   hidden_dim=None,
+                                                   hidden_dim=1,  # this argument must be declared and will be ignored
                                                    dropout_rate=dropout_rate,
                                                    word_embed_init=word_embed_variables[-1],
                                                    position_embed_init=position_embed_variables[-1],
@@ -541,3 +549,98 @@ def VariationalDropout(dropout_rate: float, name=''):
         return mask * x
 
     return inner
+
+
+def PositionwiseFeedForward(model_dim: int, intermediate_dim: int, dropout_rate: float = None,
+                            intermediate_init=default_override_or(C.glorot_uniform()),  intermediate_init_bias=default_override_or(0),
+                            init=default_override_or(C.glorot_uniform()),  init_bias=default_override_or(0),
+                            name: str = ''):
+    """ Implements Position-wise Feed-Forward Network found in Transformer and BERT
+
+    For more details please refer to "Attention is all you need", https://arxiv.org/abs/1706.03762
+
+    Arguments:
+        model_dim (int): dimensionality of model (output)
+        intermediate_dim (int): hidden/ intermediate dimension within layer
+        dropout_rate (float): probability of dropping out an element
+        intermediate_init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): initial value of weights `W`
+        intermediate_init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
+        init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): initial value of weights `W`
+        init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the operation to it
+
+    """
+    inner_dense = Dense(intermediate_dim, init=intermediate_init, init_bias=intermediate_init_bias)
+    outer_dense = Dense(model_dim, init=init, init_bias=init_bias)
+    dropout = Dropout(dropout_rate)
+
+    @C.BlockFunction('PositionwiseFeedForward', name)
+    def inner(x):
+        return outer_dense(dropout(C.relu(inner_dense(x))))
+
+    return inner
+
+
+def LayerNormalization(initial_scale=1, initial_bias=0, weights_scale=None, weights_bias=None,
+                       epsilon=default_override_or(0.00001), name=''):
+    """
+    LayerNormalization(initial_scale=1, initial_bias=0, epsilon=0.00001, name='')
+
+    Layer factory function to create a function that implements layer normalization.
+
+    Layer normalization applies this formula to every input element (element-wise):
+    ``y = (x - mean(x)) / (stddev(x) + epsilon) * scale + bias``
+    where ``scale`` and ``bias`` are learned parameters of the same dimention as the input/output.
+
+    Please refer to the paper 'Layer Normalization' by J. Lei et al for more details (https://arxiv.org/abs/1607.06450).
+
+    Example:
+     >>> f = LayerNormalization(initial_scale=2, initial_bias=1)
+     >>> f.update_signature(4)
+     >>> f([np.array([4,0,0,4])])  # result has mean 1 and standard deviation 2, reflecting the initial values for scale and bias
+         array([[ 2.99999, -0.99999, -0.99999,  2.99999]], dtype=float32)
+
+    Args:
+     initial_scale (float, default 1): initial value for the ``scale`` parameter
+     initial_bias (float, default 0): initial value for the ``bias`` parameter
+     weights_scale:
+     weights_bias:
+     epsilon (float, default 0.00001): epsilon added to the standard deviation to avoid division by 0
+     name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the operation to it
+
+
+    """
+    epsilon = C.get_default_override(LayerNormalization, epsilon=epsilon)
+    dtype = C.get_default_override(None, dtype=default_override_or(np.float32))
+
+    # parameters bound to this Function
+    if weights_scale is None and weights_bias is None:
+        scale = C.Parameter(_INFERRED, init=initial_scale, name='gamma')  # TODO: if this gets usage then offer a Softplus version like Stabilizer() for stability?
+        bias = C.Parameter(_INFERRED, init=initial_bias, name='beta')
+    else:
+        scale = C.Constant(weights_scale, name='gamma')
+        bias = C.Constant(weights_bias, name='beta')
+
+    # cast to specified data type. The default for number is float32 which might be different than desired.
+    epsilon = np.asarray(epsilon, dtype=dtype)
+    C.layers.LayerNormalization()
+
+    # expression
+    @C.BlockFunction('LayerNormalization', name)
+    def layer_normalize(x):
+        mean = C.reduce_mean(x)  # normalize w.r.t. actual sample statistics
+        x0 = x - mean
+        std = C.sqrt(C.reduce_mean(x0 * x0))
+        if epsilon != 0:
+            std += epsilon
+        x_hat = x0 / std
+        return x_hat * scale + bias    # denormalize with learned parameters
+
+    return layer_normalize

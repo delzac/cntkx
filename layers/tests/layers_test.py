@@ -1,7 +1,7 @@
 import cntk as C
 from cntkx.layers import QRNN, SinusoidalPositionalEmbedding, SpatialPyramidPooling, GatedLinearUnit
 from cntkx.layers import VariationalDropout, WeightDroppedLSTM, BertEmbeddings, PositionalEmbedding
-from cntkx.layers import PreTrainedBertEmbeddings
+from cntkx.layers import PreTrainedBertEmbeddings, PositionwiseFeedForward
 import numpy as np
 
 
@@ -158,10 +158,12 @@ def test_bert_embeddings():
     b.eval({text_tensor: [n1, n2], token_type_tensor: [m1, m2]})
 
 
-def test_pretrained_bert_embeddings():
+def test_pretrained_bert_embeddings_not_learnable():
+    """ tested to work with 'uncased_L-12_H-768_A-12' """
     text_tensor = C.sequence.input_variable(30522)
     token_type_tensor = C.sequence.input_variable(2)
     filepath_to_tf_bert_model = "../../../pretrained models/BERT/uncased/bert_model.ckpt"
+
     embeddings = PreTrainedBertEmbeddings(filepath_to_tf_bert_model, 0.1, False)
     b = embeddings(text_tensor, token_type_tensor)
 
@@ -173,3 +175,55 @@ def test_pretrained_bert_embeddings():
     m1 = np.random.random((3, 2)).astype(np.float32)
     m2 = np.random.random((6, 2)).astype(np.float32)
     b.eval({text_tensor: [n1, n2], token_type_tensor: [m1, m2]})
+
+    embed = getattr(b, "bert/embeddings/word_embeddings")
+    assert embed.shape == (768,)
+
+    embed = getattr(b, "bert/embeddings/position_embeddings")
+    assert embed.constants[0].shape == (512, 768)
+
+    embed = getattr(b, "bert/embeddings/token_type_embeddings")
+    assert embed.constants[0].shape == (2, 768)
+
+
+def test_pretrained_bert_embeddings_learnable():
+    """ tested to work with 'uncased_L-12_H-768_A-12' """
+    text_tensor = C.sequence.input_variable(30522)
+    token_type_tensor = C.sequence.input_variable(2)
+    filepath_to_tf_bert_model = "../../../pretrained models/BERT/uncased/bert_model.ckpt"
+
+    embeddings = PreTrainedBertEmbeddings(filepath_to_tf_bert_model, 0.1, True)
+    b = embeddings(text_tensor, token_type_tensor)
+
+    assert b.shape == (768,)
+
+    n1 = np.random.random((3, 30522)).astype(np.float32)
+    n2 = np.random.random((6, 30522)).astype(np.float32)
+
+    m1 = np.random.random((3, 2)).astype(np.float32)
+    m2 = np.random.random((6, 2)).astype(np.float32)
+    b.eval({text_tensor: [n1, n2], token_type_tensor: [m1, m2]})
+
+    embed = getattr(b, "bert/embeddings/word_embeddings")
+    assert embed.shape == (768,)
+
+    embed = getattr(b, "bert/embeddings/position_embeddings")
+    assert embed.parameters[0].shape == (512, 768)
+
+    embed = getattr(b, "bert/embeddings/token_type_embeddings")
+    assert embed.parameters[0].shape == (2, 768)
+
+
+def test_positionwise_feedforward():
+    model_dim = 20
+    inner_dim = 30
+
+    a = C.sequence.input_variable(10)
+    b = PositionwiseFeedForward(model_dim, inner_dim, 0.1)(a)
+
+    assert b.shape == (model_dim, )
+
+    n1 = np.random.random((3, 10)).astype(np.float32)
+    n2 = np.random.random((6, 10)).astype(np.float32)
+
+    b.eval({a: [n1, n2]})

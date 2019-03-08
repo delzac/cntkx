@@ -69,4 +69,4 @@ def position(x, name=''):
     if x.is_sparse:
         x = C.zeros_like(x)
 
-    return Recurrence(pos, initial_state=C.constant(-1), name=name)(C.slice(x, 0, 0, 1))
+    return Recurrence(pos, initial_state=C.constant(-1), name=name)(C.slice(x, 0, 0, 1))  # {#, *] [1,]

@@ -195,7 +195,7 @@ def test_multi_head_attention_block3():
 def test_transformer_encoder_block1a():
     """ Default settings: input is seq output is not seq """
     a = C.sequence.input_variable(10)
-    encoder_block = TransformerEncoderBlock(2, 10)
+    encoder_block = TransformerEncoderBlock(num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1)
     attended = encoder_block(a)
 
     assert attended.shape == (10, )
@@ -211,8 +211,9 @@ def test_transformer_decoder_block1():
     a = C.sequence.input_variable(10)
     b = C.sequence.input_variable(10)
 
-    encoder_block = TransformerEncoderBlock(num_heads=2, model_dim=10)
-    decoder_block = TransformerDecoderBlock(num_heads=2, model_dim=10)
+    encoder_block = TransformerEncoderBlock(num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1)
+    decoder_block = TransformerDecoderBlock(num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1,
+                                            obey_sequence_order=False, max_seq_len=None)
 
     encoded = encoder_block(a)
     decoded = decoder_block(encoded, b)
@@ -234,8 +235,9 @@ def test_transformer_decoder_block2():
     a = C.sequence.input_variable(10)
     b = C.sequence.input_variable(10)
 
-    encoder_block = TransformerEncoderBlock(num_heads=2, model_dim=10)
-    decoder_block = TransformerDecoderBlock(num_heads=2, model_dim=10, obey_sequence_order=True, max_seq_len=100)
+    encoder_block = TransformerEncoderBlock(num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1)
+    decoder_block = TransformerDecoderBlock(num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1,
+                                            obey_sequence_order=True, max_seq_len=100)
 
     encoded = encoder_block(a)
     decoded = decoder_block(encoded, b)
@@ -257,9 +259,11 @@ def test_transformer_decoder_block3():
     a = C.sequence.input_variable(10)
     b = C.sequence.input_variable(10)
 
-    encoder_block = TransformerEncoderBlock(num_heads=2, model_dim=10)
-    decoder_block1 = TransformerDecoderBlock(num_heads=2, model_dim=10)
-    decoder_block2 = TransformerDecoderBlock(num_heads=2, model_dim=10)
+    encoder_block = TransformerEncoderBlock(num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1)
+    decoder_block1 = TransformerDecoderBlock(num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1,
+                                             obey_sequence_order=True, max_seq_len=100)
+    decoder_block2 = TransformerDecoderBlock(num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1,
+                                             obey_sequence_order=True, max_seq_len=100)
 
     encoded = encoder_block(a)
     decoded = decoder_block1(encoded, b)
@@ -280,7 +284,7 @@ def test_transformer_decoder_block3():
 def test_transformer_encoder1a():
     """ multi-layers encoders """
     a = C.sequence.input_variable(10)
-    encoder = TransformerEncoder(5, 2, 10)
+    encoder = TransformerEncoder(n=5, num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1)
     encoded = encoder(a)
 
     assert encoded.shape == (10, )
@@ -292,14 +296,14 @@ def test_transformer_encoder1a():
 
     results = encoded.eval({a: n})
 
-    encoder = TransformerEncoder(2, 2, 10)
+    encoder = TransformerEncoder(n=2, num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1)
     encoded = encoder(a)
 
     assert encoded.shape == (10, )
 
     results = encoded.eval({a: n})
 
-    encoder = TransformerEncoder(1, 2, 10)
+    encoder = TransformerEncoder(n=1, num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1)
     encoded = encoder(a)
 
     assert encoded.shape == (10, )
@@ -310,7 +314,7 @@ def test_transformer_encoder1a():
 def test_transformer_encoder1c():
     """ No peeking and multi layers encoder """
     a = C.sequence.input_variable(10)
-    encoder = TransformerEncoder(5, 2, 10, obey_sequence_order=True, max_seq_len=100)
+    encoder = TransformerEncoder(n=5, num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1)
     encoded = encoder(a)
 
     assert encoded.shape == (10, )
@@ -322,14 +326,14 @@ def test_transformer_encoder1c():
 
     results = encoded.eval({a: n})
 
-    encoder = TransformerEncoder(2, 2, 10, obey_sequence_order=True, max_seq_len=100)
+    encoder = TransformerEncoder(n=2, num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1)
     encoded = encoder(a)
 
     assert encoded.shape == (10, )
 
     results = encoded.eval({a: n})
 
-    encoder = TransformerEncoder(1, 2, 10, obey_sequence_order=True, max_seq_len=100)
+    encoder = TransformerEncoder(n=1, num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1)
     encoded = encoder(a)
 
     assert encoded.shape == (10, )
@@ -345,7 +349,7 @@ def test_transformer_decoder1():
     a = C.sequence.input_variable(10, sequence_axis=seq1)
     b = C.sequence.input_variable(10, sequence_axis=seq2)
 
-    decoder = TransformerDecoder(5, 2, 10)
+    decoder = TransformerDecoder(n=5, num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1, max_seq_len=100)
 
     decoded = decoder(a, b)
 
@@ -360,21 +364,21 @@ def test_transformer_decoder1():
 
     results = decoded.eval({a: m, b: n})
 
-    decoder = TransformerDecoder(3, 2, 10)
+    decoder = TransformerDecoder(n=3, num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1, max_seq_len=100)
     decoded = decoder(a, b)
 
     assert decoded.shape == (10, )
 
     results = decoded.eval({a: m, b: n})
 
-    decoder = TransformerDecoder(2, 2, 10)
+    decoder = TransformerDecoder(n=2, num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1, max_seq_len=100)
     decoded = decoder(a, b)
 
     assert decoded.shape == (10, )
 
     results = decoded.eval({a: m, b: n})
 
-    decoder = TransformerDecoder(1, 2, 10)
+    decoder = TransformerDecoder(n=1, num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1, max_seq_len=100)
     decoded = decoder(a, b)
 
     assert decoded.shape == (10, )
@@ -383,51 +387,6 @@ def test_transformer_decoder1():
 
 
 def test_transformer_decoder2():
-    """ output as sequence with no peeking at future values """
-    seq1 = C.Axis.new_unique_dynamic_axis('seq1')
-    seq2 = C.Axis.new_unique_dynamic_axis('seq2')
-
-    a = C.sequence.input_variable(10, sequence_axis=seq1)
-    b = C.sequence.input_variable(10, sequence_axis=seq2)
-
-    decoder = TransformerDecoder(5, 2, 10, obey_sequence_order=True, max_seq_len=100)
-
-    decoded = decoder(a, b)
-
-    assert decoded.shape == (10, )
-
-    m = np.random.random((4, 8, 10)).astype(np.float32)
-
-    n = [np.random.random((2, 10)).astype(np.float32),
-         np.random.random((4, 10)).astype(np.float32),
-         np.random.random((6, 10)).astype(np.float32),
-         np.random.random((8, 10)).astype(np.float32)]
-
-    results = decoded.eval({a: m, b: n})
-
-    decoder = TransformerDecoder(3, 2, 10, obey_sequence_order=True, max_seq_len=100)
-    decoded = decoder(a, b)
-
-    assert decoded.shape == (10, )
-
-    results = decoded.eval({a: m, b: n})
-
-    decoder = TransformerDecoder(2, 2, 10, obey_sequence_order=True, max_seq_len=100)
-    decoded = decoder(a, b)
-
-    assert decoded.shape == (10, )
-
-    results = decoded.eval({a: m, b: n})
-
-    decoder = TransformerDecoder(1, 2, 10, obey_sequence_order=True, max_seq_len=100)
-    decoded = decoder(a, b)
-
-    assert decoded.shape == (10, )
-
-    results = decoded.eval({a: m, b: n})
-
-
-def test_transformer_decoder3():
     """
     Different dimensions between encoded and decoder model is allowed as
     encoded will be cast to model_dim of decoder.
@@ -438,7 +397,7 @@ def test_transformer_decoder3():
     a = C.sequence.input_variable(30, sequence_axis=seq1)
     b = C.sequence.input_variable(10, sequence_axis=seq2)
 
-    decoder = TransformerDecoder(5, 2, 10, obey_sequence_order=True, max_seq_len=100)
+    decoder = TransformerDecoder(n=5, num_heads=2, model_dim=10, intermediate_dim=30, dropout_rate=0.1, max_seq_len=100)
 
     decoded = decoder(a, b)
 
@@ -460,8 +419,7 @@ def test_transformer1():
     b = C.sequence.input_variable(10)
 
     transformer = Transformer(num_encoder_blocks=3, num_decoder_blocks=3, num_heads_encoder=2, num_heads_decoder=2,
-                              encoder_model_dim=10, decoder_model_dim=10, encoder_obey_sequence_order=False,
-                              decoder_obey_sequence_order=True, max_seq_len_encoder=100, max_seq_len_decoder=100)
+                              encoder_model_dim=10, decoder_model_dim=10, max_seq_len_decoder=100)
 
     prediction = transformer(a, b)
 
@@ -482,8 +440,7 @@ def test_transformer2():
     decoding = C.sequence.input_variable(30, sequence_axis=seq2)
 
     transformer = Transformer(num_encoder_blocks=3, num_decoder_blocks=3, num_heads_encoder=2, num_heads_decoder=2,
-                              encoder_model_dim=10, decoder_model_dim=30, encoder_obey_sequence_order=False,
-                              decoder_obey_sequence_order=True, max_seq_len_encoder=100, max_seq_len_decoder=100)
+                              encoder_model_dim=10, decoder_model_dim=30, max_seq_len_decoder=100)
 
     prediction = transformer(encoding, decoding)
 

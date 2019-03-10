@@ -12,6 +12,53 @@ cntk is a dependency to cntkx. Please get a working installation of cntk first. 
 cntkx only works with python3.6>=
 
 
+## Available Components
+| ops | Description |
+| --- | ---|
+| `cumsum` | Cummulative summation along axis |
+| `upsample` | Upsample by 2x (for image) |
+| `centre_crop` | Crop centre of image (convenience function) |
+| `swish` | Activataion (convenience function) |
+| `hardmax` | Activataion (convenience function) |
+| `erf` | Error function |
+| `sequence.pad` | Pad at start or end of sequence axis |
+| `sequence.length` | length of sequence |
+| `sequence.position` | position of every sequence element |
+| `random.sample` | Samples a given probability distribution |
+
+| Layers | Description |
+| --- | ---|
+| `QRNN` | Quasi-Recurrent Neural Network |
+| `WeightDroppedLSTM` | A form of regularised LSTM |
+| `SinusoidalPositionalEmbedding` | Non-learnable positional embedding (no max sequence length) |
+| `PositionalEmbedding` | Learnable Positioinal Embeeding (used in BERT) |
+| `BertEmbeddings` | BERT Embeddings (word + token_type + positional) |
+| `BertPooler` | Pooler used in BERT |
+| `SpatialPyramidPooling` | Fixed pooled representation regardless of image input size |
+| `GatedLinearUnit` | Gated Convolutional Neural Network |
+| `Variational Dropout` | Single binary dropout mask for entire sequence |
+| `ScaledDotProductAttention` | Attention used in BERT and Transformer (aka 'attention is all you need') |
+| `MultiHeadAttention` | Attention used in BERT and Transformer (aka 'attention is all you need') |
+| `GaussianWindowAttention` | Windowed attention instead of conventional attention where everything is attended at the same time |
+
+| Loss | Description |
+| --- | ---|
+| `gaussian_mdn_loss` | loss fuction when using Mixture density network |
+| `focal_loss_with_softmax` | A kind of cross entropy that handles extreme class imbalance |
+
+| Models | Description |
+| --- | ---|
+| `VGG` | Image Classification |
+| `UNET` | Segmantic Segmentation |
+| `Transformer` | Language Modelling |
+| `MDN` | Mixture Density Networks | 
+
+
+| Pretrained models | Description |
+| --- | ---|
+| `Bert` | Bidirectional Encoder Representations from Transformers |
+
+
 ## News
 ***2019-03-10.***
 #### Added `PretrainedBertEncoder` and `PretrainedBertModel`

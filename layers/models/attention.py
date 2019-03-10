@@ -1,9 +1,10 @@
 import cntk as C
 import cntkx as Cx
 import numpy as np
-from cntk.layers import Dense, LayerNormalization, ResNetBlock, Recurrence
-from cntkx.layers import PreTrainedBertEmbeddings, PositionwiseFeedForward
+from cntk.layers import LayerNormalization, ResNetBlock, Recurrence
+from cntkx.layers import PreTrainedBertEmbeddings, PositionwiseFeedForward, Dense, PretrainedBertPooler
 from cntk.default_options import default_override_or
+from cntk.layers.blocks import _inject_name
 
 
 def ScaledDotProductAttention(obey_sequence_order: bool = None, max_seq_len: int = None, name=''):
@@ -18,6 +19,10 @@ def ScaledDotProductAttention(obey_sequence_order: bool = None, max_seq_len: int
     scaled_dot_product_attention(Q, K, V) = softmax(QV.T / sqrt(dk)) * V
 
     When query, key and value are all the same, it becomes self-attention.
+
+    Note:
+        Query and key must have the same dimension
+        Key and value must have the same sequence length
 
     Example:
         a = C.sequence.input_variable(10)
@@ -37,16 +42,21 @@ def ScaledDotProductAttention(obey_sequence_order: bool = None, max_seq_len: int
     @C.BlockFunction('ScaledDotProductAttention', name)
     def attention(query, key, value):
         dk = C.reduce_sum(C.ones_like(query))  # cannot use sequence.last, will conflict with recurrence
+        # dk: [#, *] [1, ] and value = int(dim_of_query)
 
         unpacked_key = C.sequence.unpack(key, padding_value=0, no_mask_output=True)  # [#] [-3, key_dim]
         unpacked_value = C.sequence.unpack(value, padding_value=0, no_mask_output=True)  # [#] [-3, value_dim]
 
         broadcasted_key = C.sequence.broadcast_as(unpacked_key, query)  # [#, *] [-3, key_dim]
-        scaled = C.times_transpose(query, broadcasted_key) / dk  # [#, *] [-3, key_dim]
+        scaled = C.times_transpose(query, broadcasted_key) / dk
+        # [#, *] [q_dim] @ [#, *] [key_dim, -3], assert q_dim == key_dim
+        # scaled: [#, *] [-3, ] => for every key seq element, there is a corresponding score
 
+        # masked out invalid temporal connections to obey_sequence_order
         if obey_sequence_order and max_seq_len:
-            # [#] [-3, -3], [#] [-3,]
             unpacked_scaled, scaled_mask = C.sequence.unpack(scaled, padding_value=0).outputs
+            # unpacked_scaled: [#] [-3, -3]  <== matrix will be top right diagonally zero-ed
+            # scaled_mask: [#] [-3,]
 
             minus_inf = C.constant(-1e+30)
             valid_connections = C.Constant(np.tril(np.ones((max_seq_len, max_seq_len)), k=0))  # [] [max_seq, max_seq]
@@ -58,7 +68,7 @@ def ScaledDotProductAttention(obey_sequence_order: bool = None, max_seq_len: int
         elif obey_sequence_order and not max_seq_len:
             raise ValueError("max_seq_len must be defined when obey_sequence_order is True")
 
-        attended = C.times(C.softmax(scaled), C.sequence.broadcast_as(unpacked_value, query))  # [#, *] [value_dim,]
+        attended = C.times(C.softmax(scaled, axis=-1), C.sequence.broadcast_as(unpacked_value, query))  # [#, *] [value_dim,]
         return attended
 
     return attention
@@ -68,7 +78,8 @@ def MultiHeadAttention(num_heads, model_dim, obey_sequence_order: bool = None, m
                        key_init=default_override_or(C.glorot_uniform()), key_init_bias=default_override_or(0),
                        query_init=default_override_or(C.glorot_uniform()), query_init_bias=default_override_or(0),
                        value_init=default_override_or(C.glorot_uniform()), value_init_bias=default_override_or(0),
-                       init=default_override_or(C.glorot_uniform()), init_bias=default_override_or(0)):
+                       init=default_override_or(C.glorot_uniform()), init_bias=default_override_or(0),
+                       name=''):
     """ Multi-head attention as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
 
     Example:
@@ -96,24 +107,34 @@ def MultiHeadAttention(num_heads, model_dim, obey_sequence_order: bool = None, m
 
     """
     assert model_dim % num_heads == 0, "Model dimension must be divisible by number of heads"
-    # TODO: make efficient by multiplying in one chunk and slice attention it
-    head_dim = int(model_dim / num_heads)
-    query_linears = [Dense(head_dim, init=query_init, init_bias=query_init_bias) for __ in range(num_heads)]
-    key_linears = [Dense(head_dim, init=key_init, init_bias=key_init_bias) for __ in range(num_heads)]
-    value_linears = [Dense(head_dim, init=value_init, init_bias=value_init_bias) for __ in range(num_heads)]
-    multihead_liner = Dense(model_dim, init=init, init_bias=init_bias)
-    sdpa = ScaledDotProductAttention(obey_sequence_order, max_seq_len)
 
-    @C.Function
+    head_dim = int(model_dim / num_heads)
+
+    query_linear = Dense(model_dim, init=query_init, init_bias=query_init_bias)
+    key_linear = Dense(model_dim, init=key_init, init_bias=key_init_bias)
+    value_linear = Dense(model_dim, init=value_init, init_bias=value_init_bias)
+    multihead_liner = Dense(model_dim, init=init, init_bias=init_bias)
+
+    scaled_dot_product_attention = ScaledDotProductAttention(obey_sequence_order, max_seq_len)
+
+    @C.BlockFunction('MultiHeadAttention', name)
     def inner(query, key, value):
+        mixed_queries = query_linear(query)  # [#, *] {model_dim,]
+        mixed_keys = key_linear(key)  # [#, *] {model_dim,]
+        mixed_values = value_linear(value)  # [#, *] {model_dim,]
+
+        # TODO: re-implement `ScaledDotProductAttention` when cntk has BatchMatMul so there's no need to slice here
+        queries = [C.slice(mixed_queries, 0, i * head_dim, (i + 1) * head_dim) for i in range(num_heads)]
+        keys = [C.slice(mixed_keys, 0, i * head_dim, (i + 1) * head_dim) for i in range(num_heads)]
+        values = [C.slice(mixed_values, 0, i * head_dim, (i + 1) * head_dim) for i in range(num_heads)]
+
         # list of num_heads heads with shape (-3, head_dim) each
-        attention_outputs = [sdpa(q_linear(query), k_linear(key), v_linear(value))
-                             for q_linear, k_linear, v_linear in zip(query_linears, key_linears, value_linears)]
+        attention_outputs = [scaled_dot_product_attention(q, k, v) for q, k, v in zip(queries, keys, values)]
 
         result = multihead_liner(C.splice(*attention_outputs))
         return result
 
-    return inner
+    return _inject_name(inner, name)
 
 
 def MultiHeadAttentionBlock(num_heads, model_dim, obey_sequence_order: bool = None, max_seq_len: int = None,
@@ -121,7 +142,7 @@ def MultiHeadAttentionBlock(num_heads, model_dim, obey_sequence_order: bool = No
                             query_init=default_override_or(C.glorot_uniform()), query_init_bias=default_override_or(0),
                             value_init=default_override_or(C.glorot_uniform()), value_init_bias=default_override_or(0),
                             init=default_override_or(C.glorot_uniform()), init_bias=default_override_or(0),
-                            initial_scale=1, initial_bias=0):
+                            initial_scale=1, initial_bias=0, name=''):
     """ Multi head attention block as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
 
     Multi-head attention block comes with a residual connection and a layer norm.
@@ -156,17 +177,18 @@ def MultiHeadAttentionBlock(num_heads, model_dim, obey_sequence_order: bool = No
                                          key_init=key_init, key_init_bias=key_init_bias,
                                          query_init=query_init, query_init_bias=query_init_bias,
                                          value_init=value_init, value_init_bias=value_init_bias,
-                                         init=init, init_bias=init_bias)
-    layernorm = LayerNormalization(initial_scale, initial_bias)
+                                         init=init, init_bias=init_bias, name='MultiheadAttention')
+
+    layernorm = LayerNormalization(initial_scale=initial_scale, initial_bias=initial_bias, name='LayerNorm')
 
     @C.Function
-    def block(query, key, value):
+    def inner(query, key, value):
         attended = attention_layer(query, key, value)
         skip_connect_attended = attended + query
         normed_skip_connect_attended = layernorm(skip_connect_attended)
         return normed_skip_connect_attended
 
-    return block
+    return _inject_name(inner, name)
 
 
 def TransformerEncoderBlock(num_heads: int, model_dim: int, intermediate_dim: int, dropout_rate: float = None,
@@ -178,7 +200,7 @@ def TransformerEncoderBlock(num_heads: int, model_dim: int, intermediate_dim: in
                             mha_initial_scale=1, mha_initial_bias=0,
                             intermediate_init=default_override_or(C.glorot_uniform()), intermediate_init_bias=default_override_or(0),
                             init=default_override_or(C.glorot_uniform()), init_bias=default_override_or(0),
-                            initial_scale=1, initial_bias=0):
+                            initial_scale=1, initial_bias=0, name=''):
     """ Encoder block of transformer as described in "Attention is all you need", https://arxiv.org/abs/1706.03762
 
     Consist of 1 multi head attention followed by a dense layer, residual connect and layer norm
@@ -216,21 +238,23 @@ def TransformerEncoderBlock(num_heads: int, model_dim: int, intermediate_dim: in
                                         query_init=query_init, query_init_bias=query_init_bias,
                                         value_init=value_init, value_init_bias=value_init_bias,
                                         init=mha_init, init_bias=mha_init_bias,
-                                        initial_scale=mha_initial_scale, initial_bias=mha_initial_bias)
+                                        initial_scale=mha_initial_scale, initial_bias=mha_initial_bias,
+                                        name='SelfAttention')
 
     feed_foward = PositionwiseFeedForward(model_dim, intermediate_dim, dropout_rate=dropout_rate,
                                           intermediate_init=intermediate_init, intermediate_init_bias=intermediate_init_bias,
-                                          init=init, init_bias=init_bias)
+                                          init=init, init_bias=init_bias, name='PWFF')
 
-    layernorm = LayerNormalization(initial_scale, initial_bias)
+    layernorm = LayerNormalization(initial_scale, initial_bias, name='LayerNorm')
 
     @C.Function
     def block(x):
-        inner = mha_block(x, x, x)
-        output = layernorm(ResNetBlock(feed_foward)(inner))
+        self_attended = mha_block(x, C.alias(x), C.alias(x))
+        hidden = feed_foward(self_attended)
+        output = layernorm(hidden + self_attended)  # residual connection
         return output
 
-    return block
+    return _inject_name(block, name)  # consider change to BlockFunction
 
 
 def TransformerDecoderBlock(num_heads: int, model_dim: int, intermediate_dim: int, dropout_rate: float = None,
@@ -551,7 +575,7 @@ def GaussianWindowAttention(nb_mixtures):
     return attention
 
 
-def PreTrainedBertEncoder(tf_bert_model_filepath: str, num_heads:int, model_dim:int, dropout_rate: float = None):
+def PreTrainedBertEncoder(tf_bert_model_filepath: str, num_heads: int, dropout_rate: float = None):
     """ Use pre-trained tensorflow bert model
 
     Currently it is tested to work with:
@@ -561,12 +585,12 @@ def PreTrainedBertEncoder(tf_bert_model_filepath: str, num_heads:int, model_dim:
 
     Arguments:
         tf_bert_model_filepath (str): file path to the tensorflow model
-        dropout_rate (float): probability of dropping out an element in embedding and encoder
-        learnable (bool): True if training of embeddings is desired. Defaults to False.
+        num_heads (int): number of attention heads in self attention
+        dropout_rate (float): probability of dropping out an element in encoder
 
     Returns:
         :class:`~cntk.ops.functions.Function`:
-        TF to CNTK Pre-trained Bert Model (Transformer Encoder)
+        TF to CNTK Pre-trained Bert Encoder (Transformer Encoder)
     """
     try:
         import tensorflow as tf
@@ -594,21 +618,27 @@ def PreTrainedBertEncoder(tf_bert_model_filepath: str, num_heads:int, model_dim:
 
     bert_encoder_prefix = 'bert/encoder/'
 
-    bert_embeddings = PreTrainedBertEmbeddings(tf_bert_model_filepath, dropout_rate, True)
     variables_meta = tf.train.list_variables(tf_bert_model_filepath)
-
     encoder_variable_meta = [meta for meta in variables_meta if bert_encoder_prefix in meta[0]]
+
     layer_numbers = [bert_encoder_layer_number(meta[0], bert_encoder_prefix) for meta in encoder_variable_meta]
     nb_layers = max(layer_numbers) + 1  # +1 because layer numbering assumed to start from zero
-
     assert min(layer_numbers) == 0, f"Layer numbering assumed to start from zero but loaded model start from {min(layer_numbers)}"
+
+    intermediate_dim = [meta[1][0] for meta in encoder_variable_meta if 'intermediate/dense/bias' in meta[0]]
+    assert all(dim == intermediate_dim[0] for dim in intermediate_dim)
+    intermediate_dim = intermediate_dim[0]
+
+    model_dim = [meta[1][0] for meta in encoder_variable_meta if 'attention/output/dense/bias' in meta[0]]
+    assert all(dim == model_dim[0] for dim in model_dim)
+    model_dim = model_dim[0]
 
     encoder_layers = []
     mha_output_layernorm_bias_tag = 'attention/output/LayerNorm/beta'
     mha_output_layernorm_scale_tag = 'attention/output/LayerNorm/gamma'
-    
-    mha_output_dense_bias = 'attention/output/dense/bias'
-    mha_output_dense_kernel = 'attention/output/dense/kernel'
+
+    mha_output_dense_bias_tag = 'attention/output/dense/bias'
+    mha_output_dense_kernel_tag = 'attention/output/dense/kernel'
     
     mha_key_bias_tag = 'attention/self/key/bias'
     mha_key_kernel_tag = 'attention/self/key/kernel'
@@ -619,8 +649,87 @@ def PreTrainedBertEncoder(tf_bert_model_filepath: str, num_heads:int, model_dim:
 
     mha_dense_bias_tag = 'intermediate/dense/bias'
     mha_dense_kernel_tag = 'intermediate/dense/kernel'
-    TransformerEncoderBlock()
-    for layer_num in range(nb_layers):
-        pass
 
-    raise NotImplementedError
+    output_dense_bias_tag = 'output/dense/bias'
+    output_dense_kernel_tag = 'output/dense/kernel'
+    output_layernorm_scale_tag = 'output/LayerNorm/gamma'
+    output_layernorm_bias_tag = 'output/LayerNorm/beta'
+
+    config = {'num_heads': num_heads,
+              'model_dim': model_dim,
+              'intermediate_dim': intermediate_dim,
+              'dropout_rate': dropout_rate,
+              'obey_sequence_order': False,
+              'max_seq_len': None,
+              'key_init': mha_key_kernel_tag,
+              'key_init_bias': mha_key_bias_tag,
+              'query_init': mha_query_kernel_tag,
+              'query_init_bias': mha_query_bias_tag,
+              'value_init': mha_value_kernel_tag,
+              'value_init_bias': mha_value_bias_tag,
+              'mha_init': mha_output_dense_kernel_tag,
+              'mha_init_bias': mha_output_dense_bias_tag,
+              'mha_initial_scale': mha_output_layernorm_scale_tag,
+              'mha_initial_bias': mha_output_layernorm_bias_tag,
+              'intermediate_init': mha_dense_kernel_tag,
+              'intermediate_init_bias': mha_dense_bias_tag,
+              'init': output_dense_kernel_tag,
+              'init_bias': output_dense_bias_tag,
+              'initial_scale': output_layernorm_scale_tag,
+              'initial_bias': output_layernorm_bias_tag,
+              'name': None}
+    
+    for layer_num in range(nb_layers):
+        prefix = f'bert/encoder/layer_{layer_num}/'
+        initialised_config = {k: tf.train.load_variable(tf_bert_model_filepath, prefix + v) if isinstance(v, str) else v
+                              for k, v in config.items()}
+
+        initialised_config['name'] = f'encoder_layer_{layer_num}'
+        encoder_layers.append(TransformerEncoderBlock(**initialised_config))
+
+    @C.Function
+    def model(x):
+
+        for encoder_layer in encoder_layers:
+            x = encoder_layer(x)
+
+        return x
+
+    return _inject_name(model, 'bert')
+
+
+def PreTrainedBertModel(tf_bert_model_filepath: str, num_heads: int, dropout_rate: float = None):
+    """ Initialise a pre-trained CNTK bert model converted from tensorflow
+
+    Currently it is tested to work with:
+        - `BERT-Base, Uncased`, uncased_L-12_H-768_A-12
+
+    Models can be downloaded at https://github.com/google-research/bert
+
+    Arguments:
+        tf_bert_model_filepath (str): file path to the tensorflow model
+        num_heads (int): number of attention heads in self attention
+        dropout_rate (float): probability of dropping out an element in embedding and encoder
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+        TF to CNTK Pre-trained Bert Model
+    """
+    try:
+        import tensorflow as tf
+    except ImportError:
+        raise ImportError("Loading a TensorFlow models in CNTK, requires TensorFlow to be installed. Please see "
+                          "https://www.tensorflow.org/install/ for installation instructions.")
+
+    bert_embeddings = PreTrainedBertEmbeddings(tf_bert_model_filepath, dropout_rate)
+    bert_encoder = PreTrainedBertEncoder(tf_bert_model_filepath, num_heads, 0.1)
+    bert_pooler = PretrainedBertPooler(tf_bert_model_filepath)
+
+    @C.Function
+    def model(text_tensor, token_type_tensor):
+        embedded = bert_embeddings(text_tensor, token_type_tensor)
+        encoded = bert_encoder(embedded)
+        pooled = bert_pooler(encoded)  # pooled is no longer a cntk sequence
+        return pooled
+
+    return model

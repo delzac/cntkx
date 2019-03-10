@@ -2,15 +2,52 @@
 Deep learning library that builds on and extends Microsoft Cognitive Toolkit [CNTK](https://github.com/Microsoft/CNTK). 
 This library is in active development, more models and pre-built components coming soon!
 
+Contributions are very welcomed!
+
 ## Installation
 cntk is a dependency to cntkx. Please get a working installation of cntk first. Then:
 
     pip install cntkx
 
+cntkx only works with python3.6>=
+
 
 ## News
+***2019-03-10.***
+#### Added `PretrainedBertEncoder` and `PretrainedBertModel`
+BERT, the state-of-the-art language model is now available as a CNTK pretrained model.
+
+Currently, it is only tested to work with `BERT-Base, Uncased` (uncased_L-12_H-768_A-12) and can be
+downloaded from [Google AI](https://github.com/google-research/bert)
+
+When you have downloaded `BERT-Base, Uncased`, there should be 5 files inside. You will need to `.zip`
+three of those files into a tensorflow checkpoint file before you can load it into `cntkx`.
+
+Those three files are: `bert_model.ckpt.data-00000-of-00001`, `bert_model.ckpt.index`, `bert_model.ckpt.meta`.
+Then rename the extension of `.zip` into `.ckpt` and you are good to go.
+
+Example below
+
+    text_tensor = C.sequence.input_variable(30522)
+    token_type_tensor = C.sequence.input_variable(2)
+    filepath_to_tf_bert_model = "YOUR_FILE_DIRECTORY/bert_model.ckpt"
+
+    model = Cx.layers.PreTrainedBertModel(filepath_to_tf_bert_model, num_heads=12, dropout_rate=0.1)
+    b = model(text_tensor, token_type_tensor)
+
+    assert b.shape == (768,)
+
+For more details about BERT, you can find the original paper [here](https://arxiv.org/abs/1810.04805), 
+and some useful resources [here](https://towardsdatascience.com/bert-explained-state-of-the-art-language-model-for-nlp-f8b21a9b6270) 
+and [here](http://jalammar.github.io/illustrated-bert/).
+
+Note:
+It goes without saying also that to use these pre-trained models you will need to have tensorflow installed
+since we are convert them from tensorflow models.
+
+
 ***2019-03-06.***
-#### Added `PositionalEmbedding`, `BertEmbeddings` and `PreTrainedBertEmbeddings`
+#### Added `PositionalEmbedding`, `BertEmbeddings` and `PretrainedBertEmbeddings`
 CNTK implementation of `PositionalEmbedding`, `BertEmbeddings` and tf-to-cntk `PreTrainedBertEmbeddings`.
 BERT is a state-of-the-art language model from Google AI, more details can be found in
 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805).

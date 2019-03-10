@@ -1,7 +1,8 @@
 import cntk as C
 from cntkx.layers.models import Transformer, TransformerDecoder, TransformerEncoder, MultiHeadAttention
 from cntkx.layers.models import MultiHeadAttentionBlock, TransformerEncoderBlock, TransformerDecoderBlock
-from cntkx.layers.models import ScaledDotProductAttention, GaussianWindowAttention
+from cntkx.layers.models import ScaledDotProductAttention, GaussianWindowAttention, PreTrainedBertEncoder
+from cntkx.layers.models import PreTrainedBertModel
 import numpy as np
 import pytest
 
@@ -45,6 +46,84 @@ def test_scaled_dot_product_attention3():
 
     with pytest.raises(Exception):
         b = ScaledDotProductAttention()(query, keyvalue, keyvalue)
+
+
+def test_scaled_dot_product_attention4():
+    """ value can be of a completely different dimensions as the query or key """
+    s1, s2 = 4, 2
+
+    query = C.sequence.input_variable(5)
+    key = C.sequence.input_variable(5)
+    value = C.sequence.input_variable(7)
+
+    b = ScaledDotProductAttention()(query, key, value)
+
+    n1 = np.random.random((s1, 5)).astype(np.float32)
+    n2 = np.random.random((s2, 5)).astype(np.float32)
+
+    m1 = np.random.random((s1, 7)).astype(np.float32)
+    m2 = np.random.random((s2, 7)).astype(np.float32)
+
+    results = b.eval({query: [n1, n2], key: [n1, n2], value: [m1, m2]})
+
+
+def test_scaled_dot_product_attention5():
+    """
+    value different dimension to query and key, AND
+    query and key can have different sequence length, AND
+    key and value must have same sequence length
+    """
+    s1, s2 = 4, 2
+    s3, s4 = 5, 10
+
+    seq1 = C.Axis.new_unique_dynamic_axis('seq1')
+    seq2 = C.Axis.new_unique_dynamic_axis('seq2')
+
+    query = C.sequence.input_variable(5, sequence_axis=seq1)
+    key = C.sequence.input_variable(5, sequence_axis=seq2)
+    value = C.sequence.input_variable(7, sequence_axis=seq2)
+
+    b = ScaledDotProductAttention()(query, key, value)
+
+    q1 = np.random.random((s3, 5)).astype(np.float32)
+    q2 = np.random.random((s4, 5)).astype(np.float32)
+
+    k1 = np.random.random((s1, 5)).astype(np.float32)
+    k2 = np.random.random((s2, 5)).astype(np.float32)
+
+    v1 = np.random.random((s1, 7)).astype(np.float32)
+    v2 = np.random.random((s2, 7)).astype(np.float32)
+
+    results = b.eval({query: [q1, q2], key: [k1, k2], value: [v1, v2]})
+
+
+def test_scaled_dot_product_attention6():
+    """
+    key and value must have same sequence length
+    """
+    s1, s2 = 4, 2
+    s3, s4 = 5, 10
+
+    seq1 = C.Axis.new_unique_dynamic_axis('seq1')
+    seq2 = C.Axis.new_unique_dynamic_axis('seq2')
+
+    query = C.sequence.input_variable(5, sequence_axis=seq1)
+    key = C.sequence.input_variable(5, sequence_axis=seq1)
+    value = C.sequence.input_variable(7, sequence_axis=seq2)
+
+    b = ScaledDotProductAttention()(query, key, value)
+
+    q1 = np.random.random((s3, 5)).astype(np.float32)
+    q2 = np.random.random((s4, 5)).astype(np.float32)
+
+    k1 = np.random.random((s3, 5)).astype(np.float32)
+    k2 = np.random.random((s4, 5)).astype(np.float32)
+
+    v1 = np.random.random((s1, 7)).astype(np.float32)
+    v2 = np.random.random((s2, 7)).astype(np.float32)
+
+    with pytest.raises(Exception):
+        results = b.eval({query: [q1, q2], key: [k1, k2], value: [v1, v2]})
 
 
 def test_multi_head_attention1():
@@ -130,7 +209,8 @@ def test_multi_head_attention_w_recurrence_lstm():
 
         @C.Function
         def lstm_w_attention(h, c, x):
-            attended = mha(h, encoded, encoded)
+            # alias is used to work around bug when arguments in block funcion are the same
+            attended = mha(h, encoded, C.alias(encoded))
 
             xx = C.splice(attended, x)
             return lstm(h, c, xx)
@@ -204,6 +284,44 @@ def test_transformer_encoder_block1a():
          np.random.random((6, 10)).astype(np.float32)]
 
     results = attended.eval({a: n})
+
+
+def test_initialisation_transformer_encoder_block():
+    """ custom initialise encoder block using numpy """
+    model_dim = 768
+    intermediate_dim = 3072
+    num_heads = 12
+
+    bias = np.random.random((model_dim, )).astype(np.float32)
+    kernel = np.random.random((model_dim, model_dim)).astype(np.float32)
+
+    intermediate_bias = np.random.random((intermediate_dim, )).astype(np.float32)
+    intermediate_kernel = np.random.random((model_dim, intermediate_dim)).astype(np.float32)
+
+    final_kernel = np.random.random((intermediate_dim, model_dim)).astype(np.float32)
+
+    TransformerEncoderBlock(num_heads=num_heads,
+                            model_dim=model_dim,
+                            intermediate_dim=intermediate_dim,
+                            dropout_rate=0.1,
+                            obey_sequence_order=False,
+                            max_seq_len=None,
+                            key_init=kernel,
+                            key_init_bias=bias,
+                            query_init=kernel,
+                            query_init_bias=bias,
+                            value_init=kernel,
+                            value_init_bias=bias,
+                            mha_init=kernel,
+                            mha_init_bias=bias,
+                            mha_initial_scale=bias,
+                            mha_initial_bias=bias,
+                            intermediate_init=intermediate_kernel,
+                            intermediate_init_bias=intermediate_bias,
+                            init=final_kernel,
+                            init_bias=bias,
+                            initial_scale=bias,
+                            initial_bias=bias)
 
 
 def test_transformer_decoder_block1():
@@ -470,3 +588,34 @@ def test_gaussian_window_attention():
     m = np.random.random((2, 15, 28)).astype(np.float32)
 
     results = a.eval({encoded: n, query: m})
+
+
+def test_pretrained_bert_model1():
+    """ tested to work with 'uncased_L-12_H-768_A-12' """
+    text_tensor = C.sequence.input_variable(30522)
+    token_type_tensor = C.sequence.input_variable(2)
+    filepath_to_tf_bert_model = "../../../pretrained models/BERT/uncased/bert_model.ckpt"
+
+    model = PreTrainedBertModel(filepath_to_tf_bert_model, 12, 0.1)
+    b = model(text_tensor, token_type_tensor)
+
+    assert b.shape == (768,)
+
+    n1 = np.random.random((3, 30522)).astype(np.float32)
+    n2 = np.random.random((6, 30522)).astype(np.float32)
+
+    m1 = np.random.random((3, 2)).astype(np.float32)
+    m2 = np.random.random((6, 2)).astype(np.float32)
+    b.eval({text_tensor: [n1, n2], token_type_tensor: [m1, m2]})
+
+
+def test_pretrained_bert_model2():
+    """ tested to work with 'uncased_L-12_H-768_A-12' """
+    text_tensor = C.sequence.input_variable(30522)
+    token_type_tensor = C.sequence.input_variable(3)
+    filepath_to_tf_bert_model = "../../../pretrained models/BERT/uncased/bert_model.ckpt"
+
+    model = PreTrainedBertModel(filepath_to_tf_bert_model, 12, 0.1)
+
+    with pytest.raises(Exception):
+        model(text_tensor, token_type_tensor)

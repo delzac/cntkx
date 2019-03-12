@@ -15,23 +15,24 @@ cntkx only works with python3.6>=
 ## Available Components
 | ops | Description |
 | --- | ---|
-| `cumsum` | Cummulative summation along axis |
+| `cumsum` | Cumulative summation along axis |
 | `upsample` | Upsample by 2x (for image) |
 | `centre_crop` | Crop centre of image (convenience function) |
-| `swish` | Activataion (convenience function) |
-| `hardmax` | Activataion (convenience function) |
+| `swish` | Activation (convenience function) |
+| `hardmax` | Activation (convenience function) |
 | `erf` | Error function |
 | `sequence.pad` | Pad at start or end of sequence axis |
 | `sequence.length` | length of sequence |
 | `sequence.position` | position of every sequence element |
 | `random.sample` | Samples a given probability distribution |
+| `batchmatmul` | Batch Matrix Multiplication on a static batch axis, similar to tf.matmul |
 
 | Layers | Description |
 | --- | ---|
 | `QRNN` | Quasi-Recurrent Neural Network |
 | `WeightDroppedLSTM` | A form of regularised LSTM |
 | `SinusoidalPositionalEmbedding` | Non-learnable positional embedding (no max sequence length) |
-| `PositionalEmbedding` | Learnable Positioinal Embeeding (used in BERT) |
+| `PositionalEmbedding` | Learnable Positional Embedding (used in BERT) |
 | `BertEmbeddings` | BERT Embeddings (word + token_type + positional) |
 | `BertPooler` | Pooler used in BERT |
 | `SpatialPyramidPooling` | Fixed pooled representation regardless of image input size |
@@ -43,23 +44,37 @@ cntkx only works with python3.6>=
 
 | Loss | Description |
 | --- | ---|
-| `gaussian_mdn_loss` | loss fuction when using Mixture density network |
+| `gaussian_mdn_loss` | loss function when using Mixture density network |
 | `focal_loss_with_softmax` | A kind of cross entropy that handles extreme class imbalance |
 
 | Models | Description |
 | --- | ---|
 | `VGG` | Image Classification |
-| `UNET` | Segmantic Segmentation |
+| `UNET` | Semantic Segmentation |
 | `Transformer` | Language Modelling |
 | `MDN` | Mixture Density Networks | 
 
 
-| Pretrained models | Description |
+| Pre-trained models | Description |
 | --- | ---|
 | `Bert` | Bidirectional Encoder Representations from Transformers |
 
 
 ## News
+***2019-03-12.***
+#### Added `cntkx.ops.batchmatmul`
+Added Batch Matrix Multiplication. This implementation is similar 
+to [tensorflow.matmul](https://www.tensorflow.org/api_docs/python/tf/linalg/matmul).
+
+Example:
+
+    a = C.sequence.input_variable((3, 4, 5))     # batch matrix
+    b = C.sequence.input_variable((3, 5, 6))     # batch matrix
+    c = Cx.batchmatmul(a, b)
+    assert c.shape == (3, 4, 6)                  # 3 is treated as a batch axis
+
+
+
 ***2019-03-10.***
 #### Added `PretrainedBertEncoder` and `PretrainedBertModel`
 BERT, the state-of-the-art language model is now available as a CNTK pretrained model.

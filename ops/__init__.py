@@ -2,6 +2,7 @@ import cntk as C
 import numpy as np
 from . import sequence
 from . import random
+from cntk.layers.blocks import _inject_name
 
 
 ##########################################################################
@@ -26,6 +27,88 @@ def cumsum(x, axis: int = -1):
     if axis != -1:
         z = C.swapaxes(z, -1, axis)
     return z
+
+
+def batchmatmul(left, right, output_rank=1, infer_input_rank_to_map=C.TIMES_NO_INFERRED_INPUT_RANK, name=''):
+    """ Batch Matrix Multiplication
+
+    The output of this operation is the matrix product of the two input batch matrices.
+
+    This implementation is similar to tensorflow.matmul.
+
+    Currently assumes the first axis to be the static batch axis. Does not accept multiple static batch axis.
+
+    Example:
+        a = C.sequence.input_variable((3, 4, 5))     # batch matrix
+        b = C.sequence.input_variable((3, 5, 6))     # batch matrix
+        c = Cx.batchmatmul(a, b)
+        assert c.shape == (3, 4, 6)                  # 3 is treated as a batch axis
+
+
+        a = C.sequence.input_variable((3, 4, 5))     # batch matrix
+        b = C.sequence.input_variable((3, 5, 6, 7))  # batch tensor
+        c = Cx.batchmatmul(a, b, output_rank=2)
+        assert c.shape == (3, 4, 6, 7)               # 3 is treated as a batch axis
+
+
+        a = C.input_variable((3, 4, 5))              # batch matrix
+        b = C.input_variable((3, 5, 6, 7))           # batch tensor
+        c = Cx.batchmatmul(a, b, output_rank=2)
+        assert c.shape == (3, 4, 6, 7)
+
+
+    Arguments:
+        left: left side matrix or tensor
+        right: right side matrix or tensor
+        output_rank (int): in case we have tensors as arguments, output_rank represents
+            the number of axes to be collapsed in order to transform the tensors
+            into matrices, perform the operation and then reshape back (explode the axes)
+        infer_input_rank_to_map (int): meant for internal use only. Always use default value
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+    """
+
+    left_shape = left.shape
+    right_shape = right.shape
+
+    seq_axis_present = len(left.dynamic_axes) == 2
+    static_batch_axis = left_shape[0]  # assumes the first axis to be the static batch axis.
+
+    if left_shape[0] != right_shape[0]:
+        raise ValueError("first axis of left operand and right operand must be the same")
+
+    if (left_shape[0] < 0 or right_shape[0] < 0) and seq_axis_present:
+        raise ValueError("Static batch axis cannot be a free axis when dynamic sequence axis is also present")
+
+    # Combine dynamic sequence axis and static batch axis
+    if not seq_axis_present:
+        left_unpacked = left
+        right_unpacked = right
+    else:
+        left_unpacked = C.sequence.unpack(left, padding_value=0, no_mask_output=True)
+        right_unpacked = C.sequence.unpack(right, padding_value=0, no_mask_output=True)
+
+        left_unpacked = C.reshape(left_unpacked, (-1,) + left_shape[1:])
+        right_unpacked = C.reshape(right_unpacked, (-1,) + right_shape[1:])
+
+    # Fold static batch axis into dynamic sequence axis
+    left_folded = C.to_sequence(left_unpacked)
+    right_folded = C.to_sequence_like(right_unpacked, left_folded)
+
+    # Matrix Multiply when no static batch axis is present
+    result = C.times(left_folded, right_folded, output_rank=output_rank, infer_input_rank_to_map=infer_input_rank_to_map)
+
+    # Split dynamic sequence axis back to original dynamic sequence and static batch axis
+    result_unpacked = C.sequence.unpack(result, padding_value=0, no_mask_output=True)
+    if not seq_axis_present:
+        result_packed = C.reshape(result_unpacked, (static_batch_axis, ) + result.shape)
+    else:
+        result_unfolded = C.reshape(result_unpacked, (-1, static_batch_axis) + result.shape)
+        result_packed = C.to_sequence_like(result_unfolded, left)
+
+    return _inject_name(result_packed, name)
 
 
 def upsample(x):

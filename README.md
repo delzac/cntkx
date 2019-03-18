@@ -60,6 +60,10 @@ cntkx only works with python3.6>=
 | `Bert` | Bidirectional Encoder Representations from Transformers |
 
 
+| Learners | Description |
+| --- | ---|
+| `CyclicalLearningRate` | a method to eliminate the need to find best value and schedule for learning rate |
+
 
 ## C# CNTK Tutorials
 This library is implemented in pure cntk python API. For help in cntk c#, you can refer to the two repository 
@@ -68,6 +72,33 @@ and [DeepBelief_Course4_Examples](https://github.com/AllanYiin/DeepBelief_Course
 
 
 ## News
+***2019-03-18.***
+#### Added `cntkx.learners.CyclicalLearningRate`
+Cyclical learning rate (CLR) is an implementation to that  practically eliminates the need to 
+experimentally find the best values and schedule  for  the global  learning  rates.
+
+Instead  of  monotonically decreasing the learning rate, this method lets the learning  
+rate  cyclically  vary  between  reasonable  boundary  values. Training  with  
+cyclical  learning  rates  instead of  fixed  values  achieves improved  classification 
+accuracy without a need to tune and often in fewer iterations.
+
+More details can be found in [Cyclical Learning Rates for Training Neural Networks](https://arxiv.org/abs/1506.01186) 
+by Leslie N. Smith
+
+This CLR implementation can be used with the cntk training loop by adding only ***two lines of code***:
+
+    model = C.layers.Dense(10)(C.input_variable(10))
+    sgd_momentum = C.momentum_sgd(model.parameters, 0.1, 0.9)
+    clr = CyclicalLeaningRate(sgd_momentum, minibatch_size=32)  # first line of code
+
+    for epoch in range(10):
+        for batch in range(100):
+            trainer.train_minibatch(...)
+            clr.batch_step()  # second line of code (to be called after every training update)
+
+
+
+
 ***2019-03-12.***
 #### Added `cntkx.ops.batchmatmul`
 Added Batch Matrix Multiplication. This implementation is similar 

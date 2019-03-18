@@ -61,6 +61,34 @@ def test_erf():
     np.testing.assert_almost_equal(np.array(results), ans, decimal=6)
 
 
+def test_seq_batchmatmul0():
+    """ sequence axis present, left operand is matrix and right operand is vector """
+    dynamic_batch = 2
+    seq_len = 4
+    matmul_batch = 3
+
+    batch_shape = (dynamic_batch, seq_len, matmul_batch)
+
+    left_operand_shape = (5, 2)
+    right_operand_shape = (2, 1)
+    final_shape = (5, 1)
+
+    n = np.random.random(batch_shape + left_operand_shape).astype(np.float32)
+    m = np.random.random(batch_shape + right_operand_shape).astype(np.float32)
+
+    a = C.sequence.input_variable((matmul_batch,) + left_operand_shape)
+    b = C.sequence.input_variable((matmul_batch,) + right_operand_shape)
+
+    c = batchmatmul(a, b)
+    assert c.shape == (matmul_batch, ) + final_shape
+
+    desired = n @ m
+    result = c.eval({a: n, b: m})
+    result = np.array(result)
+
+    np.testing.assert_almost_equal(result, desired, decimal=7)
+
+
 def test_seq_batchmatmul1():
     """ sequence axis present, left operand is matrix and right operand is matrix """
     dynamic_batch = 2

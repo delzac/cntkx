@@ -156,6 +156,9 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
     More details on tuning and application can be found in this paper:
     [An Analysis of Neural Language Modeling at Multiple Scales](https://arxiv.org/abs/1803.08240)
 
+    QRNN is used in hangwriting recognition in Gboard too. More details in following link:
+    https://ai.googleblog.com/2019/03/rnn-based-handwriting-recognition-in.html
+
     From the authors:
         The QRNN provides similar accuracy to the LSTM but can be between
         2 and 17 times faster than the highly optimized NVIDIA cuDNN LSTM

@@ -94,8 +94,8 @@ def batchmatmul(left, right, output_rank=1, infer_input_rank_to_map=C.TIMES_NO_I
         right_unpacked = C.reshape(right_unpacked, (-1,) + right_shape[1:])
 
     # Fold static batch axis into dynamic sequence axis
-    left_folded = C.to_sequence(left_unpacked)
-    right_folded = C.to_sequence_like(right_unpacked, left_folded)
+    left_folded = C.to_sequence(left_unpacked)  # do not set sequence length as batch axis has been folded in
+    right_folded = C.to_sequence_like(right_unpacked, left_folded)  # seq_length / axis set here to tell cntk they have the same seq axis
 
     # Matrix Multiply when no static batch axis is present
     result = C.times(left_folded, right_folded, output_rank=output_rank, infer_input_rank_to_map=infer_input_rank_to_map)

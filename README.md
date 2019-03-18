@@ -60,6 +60,13 @@ cntkx only works with python3.6>=
 | `Bert` | Bidirectional Encoder Representations from Transformers |
 
 
+
+## C# CNTK Tutorials
+This library is implemented in pure cntk python API. For help in cntk c#, you can refer to the two repository 
+[deep-learning-with-csharp-and-cntk](https://github.com/anastasios-stamoulis/deep-learning-with-csharp-and-cntk) 
+and [DeepBelief_Course4_Examples](https://github.com/AllanYiin/DeepBelief_Course4_Examples). 
+
+
 ## News
 ***2019-03-12.***
 #### Added `cntkx.ops.batchmatmul`

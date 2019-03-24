@@ -9,7 +9,7 @@ cntk is a dependency to cntkx. Please get a working installation of cntk first. 
 
     pip install cntkx
 
-cntkx only works with python3.6>=
+cntkx only works with python>=3.6
 
 
 ## Available Components

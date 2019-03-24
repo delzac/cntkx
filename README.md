@@ -81,7 +81,7 @@ Add max pooling layer that works with sequential axis. Current cntk `MaxPooling`
 
 Example on `cntkx.layers.SequentialMaxPooling`
 
-    # rgb image of height 32 and variable width
+    # rgb image of height 25 and variable width
     a = C.sequence.input_variable((3, 25))
     
     # Convolute across image with (3, 3) kernel with stride (1, 1)

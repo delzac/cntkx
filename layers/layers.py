@@ -394,6 +394,170 @@ def SpatialPyramidPooling(bins: tuple, name=''):
     return spp
 
 
+def SequentialStride(input_ndim: int, dim_axis0: int, stride: int = 1, pad: bool = True, name: str = ''):
+    """ Strides across the sequential axis
+
+    Example:
+        a = C.sequence.input_variable((3, 10))
+        b = SequentialStride(input_ndim=2, dim_axis0=3, stride=2, pad=False)(a
+
+        assert b.shape == a.shape
+        # b has all odd sequence element due to stride=2
+
+    Arguments:
+        input_ndim (int): number of dimensions in input tensor
+        dim_axis0 (int): dimension of first axis of input tensor, i.e. input_tensor.shape[0]
+        stride (int): stride across sequential axis
+        pad (bool): whether to pad sequential axis
+        name (str): name of function instance in network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
+
+    # create dummy pad/stride/filter for static axes
+    num_static_axes = (input_ndim - 1)
+    conv_pad = (pad, ) + (False,) * num_static_axes
+    conv_strides = (stride, ) + (1,) * num_static_axes
+    conv_filter = (1,) + (1,) * num_static_axes
+    conv_num_filters = dim_axis0
+
+    assert len(conv_pad) == len(conv_strides) == len(conv_filter) == 1 + num_static_axes
+
+    identity_kernel = np.eye(conv_num_filters, conv_num_filters)
+    identity_kernel = identity_kernel.reshape((conv_num_filters, conv_num_filters) + (1,) * len(conv_filter))
+
+    for i, d in enumerate(conv_filter):
+        identity_kernel = np.repeat(identity_kernel, d, axis=2 + i)
+
+    # print('===========================================')
+    # print('Sequential Stride')
+    # print('-------------------------------------------')
+    # print(f'conv_num_filters:   {conv_num_filters}')
+    # print(f'conv_filter:        {conv_filter}')
+    # print(f'conv_strides:       {conv_strides}')
+    # print(f'conv_pad:           {conv_pad}')
+    # print(f'identity_kernel:    {identity_kernel.shape}')
+    # print('===========================================')
+
+    # set identity kernel into convolution layer
+    dummy_input_shape = (conv_num_filters, ) + (1,) * num_static_axes
+    dummy = C.sequence.input_variable(shape=dummy_input_shape, name='dummy')
+
+    strider = SequentialConvolution(filter_shape=conv_filter, num_filters=conv_num_filters,
+                                    bias=False, pad=conv_pad, strides=conv_strides, name='strider')
+    temp = strider(dummy)  # to initialise inferred dimension in kernel
+    strider.W.value = identity_kernel
+    strider = temp.clone(C.CloneMethod.freeze, {dummy: C.placeholder()})  # to work around bug
+
+    @C.BlockFunction('SequentialStride', name)
+    def inner(x):
+        return strider(x)
+
+    return inner
+
+
+def SequentialMaxPooling(filter_shape,  # shape of receptive field, e.g. (3,3). filter_shape[0] is for sequence axis.
+                         strides=1,     # strides[0] is for sequence axis.
+                         pad=default_override_or(True),   # pad[0] is for sequence axis.
+                         name=''):
+    """ Layer factory function to create a max-pooling layer that works with sequences
+
+    Sequential max pooling has a slight bug in that even when Pad=False, sequence axis will still be
+    padded and asymmetrically padded so on the right. i.e. there may be an extrac sequence element. But it should
+    not be an issue since error in border pixels typically wouldn't affect results.
+
+    Example:
+        # rgb image of height 25 and variable width
+        a = C.sequence.input_variable((3, 25))
+
+        # max pool (2,2) in height and width with stride (2,2) in height and width, no padding
+        b = SequentialMaxPooling(filter_shape=(2, 2), strides=(2, 2), pad=False)(a)
+        assert b.shape == (3, 12)
+
+        # max pool (2,2) in height and width with stride (2,2) in height and width, with padding
+        b = SequentialMaxPooling(filter_shape=(2, 2), strides=(2, 2), pad=True)(a)
+        assert b.shape == (3, 13)
+
+
+    Arguments:
+        filter_shape (`int` or `tuple` of `ints`): shape (spatial extent) of the receptive field, *not* including the input feature-map depth. E.g. (3,3) for a 2D convolution.
+        strides (`int` or `tuple` of `ints`, defaults to 1): stride (increment when sliding over the input). Use a `tuple` to specify a per-axis value.
+        pad (`bool` or `tuple` of `bools`, defaults to `False`): if `False`, then the pooling operation will be shifted over the "valid"
+          area of input, that is, no value outside the area is used. If ``pad=True`` on the other hand,
+          pooling will be applied to all input positions, and positions outside the valid region will be considered containing zero.
+          Use a `tuple` to specify a per-axis value.
+        name (str, defaults to ''): the name of the function instance in the network
+
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the max-pooling operation to it
+
+    """
+    assert isinstance(filter_shape, tuple), "filter must be a tuple"
+
+    if not isinstance(pad, tuple):
+        pad = tuple(pad for __ in filter_shape)
+
+    if not isinstance(strides, tuple):
+        strides = tuple(strides for __ in filter_shape)
+
+    # for pooling in static axes
+    pool_filter_shape = filter_shape[1:]
+    pool_pad = pad[1:]
+    pool_strides = strides[1:]
+
+    window_dim = 1 + 1 + len(filter_shape[1:])  # concat axis + channel axis + any other static axes
+    seq_stride = SequentialStride(input_ndim=window_dim,             # concat axis
+                                  dim_axis0=filter_shape[0],         # window/kernel size in seq axis
+                                  stride=strides[0],
+                                  pad=pad[0],
+                                  name='seq_stride')
+
+    # static_pool over (channel_static_axis, height_static_axis)
+    if pool_filter_shape and pool_strides and pool_pad:
+        static_pooler = MaxPooling(filter_shape=filter_shape[1:], strides=pool_strides, pad=pool_pad, name='static_pooler')
+    else:
+        static_pooler = identity  # when there is no static axes to pool
+
+    @C.BlockFunction('SequentialMaxPooling', name)
+    def inner(x):
+        if pad[0]:  # sequential axis
+            # when kernel is even, padding will be asymmetric in left and right
+            right_pad = int((filter_shape[0] - 1) / 2) if filter_shape[0] % 2 else int(filter_shape[0] / 2)
+            left_pad = right_pad if filter_shape[0] % 2 else right_pad - 1
+
+            past = [C.sequence.past_value(x, time_step=i + 1) for i in range(left_pad)]
+            future = [C.sequence.future_value(x, time_step=i + 1) for i in range(right_pad)]
+
+            past_now_future = past + [x] + future
+
+        else:
+
+            future = [C.sequence.future_value(x, time_step=i + 1) for i in range(filter_shape[1] - 1)]
+            past_now_future = [x] + future
+
+        windows = C.splice(*past_now_future, axis=C.Axis.new_leading_axis())
+        # windows: [#, *] [concat, channel, static_axes...]
+
+        selected_windows = seq_stride(windows)
+        # selected_windows: [#, **] [concat, channel, static_axes...]
+
+        # Pooling between sequential elements done by reduce_max on windows
+        # BUGBUG: do not set keepdims=False in reduce_max, will raise error
+        sequential_max_pooled = C.squeeze(C.reduce_max(selected_windows, axis=0), axes=0)
+        # sequential_max_pooled: [#, **] [channel, static_axes...]
+
+        pooled = static_pooler(sequential_max_pooled)
+        # sequential_max_pooled: [#, **] [channel, pooled_static_axes...]
+
+        return pooled
+
+    return inner
+
+
 def GatedLinearUnit(window: int = 2, hidden_dim: int = None, activation=C.sigmoid):
     """
     Gated Linear Unit or gated convolutional neural network is a finite context approach
@@ -548,7 +712,7 @@ def PreTrainedBertEmbeddings(tf_bert_model_filepath: str, dropout_rate: float = 
 
     variables_meta = [meta for meta in tf.train.list_variables(tf_bert_model_filepath) if meta[0] in layer_names]
     pretrained_weights = [tf.train.load_variable(tf_bert_model_filepath, meta[0]) for meta in variables_meta]
-    pretrained_variables = [(name, shape, weight) for weight, (name, shape) in zip(pretrained_weights, variables_meta)]
+    pretrained_variables = [(n, shape, weight) for weight, (n, shape) in zip(pretrained_weights, variables_meta)]
 
     layernorm_beta_embed_variables = pretrained_variables[0]  # bias
     layernorm_gamma_embed_variables = pretrained_variables[1]  # scale

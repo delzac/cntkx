@@ -41,6 +41,8 @@ cntkx only works with python3.6>=
 | `ScaledDotProductAttention` | Attention used in BERT and Transformer (aka 'attention is all you need') |
 | `MultiHeadAttention` | Attention used in BERT and Transformer (aka 'attention is all you need') |
 | `GaussianWindowAttention` | Windowed attention instead of conventional attention where everything is attended at the same time |
+| `SequentialStride` | strides across sequential axis |
+| `SequentialMaxPooling` | Max pool across sequential axis and static axes |
 
 | Loss | Description |
 | --- | ---|
@@ -72,6 +74,27 @@ and [DeepBelief_Course4_Examples](https://github.com/AllanYiin/DeepBelief_Course
 
 
 ## News
+***2019-03-24.***
+#### Added `cntkx.layers.SequentialMaxPooling` and `cntkx.layers.SequentialStride`
+Add max pooling layer that works with sequential axis. Current cntk `MaxPooling` doesn't pool across sequence elements.
+`SequentialStride` is added to allow striding across sequence axis.
+
+Example on `cntkx.layers.SequentialMaxPooling`
+
+    # rgb image of height 32 and variable width
+    a = C.sequence.input_variable((3, 25))
+    
+    # Convolute across image with (3, 3) kernel with stride (1, 1)
+    b = C.layers.SequentialConvolution(filter_shape=(3, 3), num_filters=16, stride=(1, 1), pad=True)(a)
+    
+    assert b.shape == (16, 25)
+    
+    # max pool (2,2) in height and width with stride (2,2) in height and width, no padding
+    c = SequentialMaxPooling(filter_shape=(2, 2), strides=(2, 2), pad=False)(b)
+    
+    assert c.shape == (16, 12)
+
+
 ***2019-03-18.***
 #### Added `cntkx.learners.CyclicalLearningRate`
 Cyclical learning rate (CLR) is an implementation to that  practically eliminates the need to 

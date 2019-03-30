@@ -3,6 +3,7 @@ import numpy as np
 import cntk as C
 import cntkx as Cx
 from cntkx.layers.blocks import WeightMaskedLSTM, _INFERRED
+from cntkx.layers.sequence import VariationalDropout
 from cntk.default_options import default_override_or
 from cntk.layers.blocks import identity, _initializer_for, _inject_name
 from cntk.layers import SequentialConvolution, Recurrence, Embedding, Dropout
@@ -13,9 +14,7 @@ from cntk.variables import Record
 
 # TODO: To be removed once the main cntk line accepts the pull request to fix initialisation bug
 def Dense(shape, activation=default_override_or(identity), init=default_override_or(C.glorot_uniform()),
-          input_rank=None, map_rank=None,
-          bias=default_override_or(True), init_bias=default_override_or(0),
-          name=''):
+          input_rank=None, map_rank=None, bias=default_override_or(True), init_bias=default_override_or(0), name=''):
     '''
     Dense(shape, activation=identity, init=glorot_uniform(), input_rank=None, map_rank=None, bias=True, init_bias=0, name='')
 
@@ -194,7 +193,8 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
     sequential_conv = SequentialConvolution(filter_shape=(window,),
                                             num_filters=3 * hidden_dim,
                                             pad=False,
-                                            reduction_rank=1)
+                                            reduction_rank=1,
+                                            name='conv')
 
     @C.Function
     def f_pool(c, zf):
@@ -861,35 +861,6 @@ def WeightDroppedLSTM(shape, dropconnect_rate: float = None, variational_dropout
         return output
 
     return _inject_name(inner, name)
-
-
-def VariationalDropout(dropout_rate: float, name=''):
-    """ Variational dropout uses the same dropout mask at each time step (i.e. across the dynamic sequence axis)
-
-    Example:
-        a = C.sequence.input_variable(10)
-        b = VariationalDropout(0.1)(a)
-
-        assert b.shape == a.shape
-
-    Arguments:
-        dropout_rate (float): probability of dropping out an element
-        name (str, defaults to ''): the name of the Function instance in the network
-
-    Returns:
-        cntk.ops.functions.Function:
-        A function that accepts one argument and applies the operation to it
-
-    """
-    dropout = C.layers.Dropout(dropout_rate)
-
-    @C.BlockFunction('VariationalDropout', name)
-    def inner(x):
-        mask = dropout(C.sequence.first(x))
-        mask = C.sequence.broadcast_as(mask, x)
-        return mask * x
-
-    return inner
 
 
 def PositionwiseFeedForward(model_dim: int, intermediate_dim: int, dropout_rate: float = None,

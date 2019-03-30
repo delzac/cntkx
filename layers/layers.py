@@ -146,7 +146,7 @@ def Dense(shape, activation=default_override_or(identity), init=default_override
     return dense
 
 
-def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=False):
+def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=False, name=''):
     """
     Quasi-Recurrent Neural Networks layer
 
@@ -183,6 +183,7 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
         hidden_dim (int): size of hidden dim of h, c and o
         activation: cell activation function
         return_full_state: if to return cell and hidden states. Default false.
+        name: name of function instance in network
 
     Returns:
         :class:`~cntk.ops.functions.Function`: OR
@@ -190,22 +191,26 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
 
     """
 
+    sequential_conv = SequentialConvolution(filter_shape=(window,),
+                                            num_filters=3 * hidden_dim,
+                                            pad=False,
+                                            reduction_rank=1)
+
     @C.Function
     def f_pool(c, zf):
         z = C.slice(zf, 0, 0, hidden_dim)
         f = C.slice(zf, 0, hidden_dim, 2 * hidden_dim)
         return f * c + (1 - f) * z
 
+    @C.BlockFunction('QRNN', name)
     def model(input_tensor):
-        filter_shape = (window, ) + input_tensor.shape
 
         input_sequence = input_tensor
         if window > 1:
             # to ensure causal relation is still preserved
             input_sequence = Cx.sequence.pad(input_sequence, (window - 1, 0), constant_value=0)
 
-        gate_values = SequentialConvolution(filter_shape=filter_shape, num_filters=3 * hidden_dim, pad=False,
-                                            reduction_rank=0)(input_sequence) >> C.squeeze
+        gate_values = sequential_conv(input_sequence)
 
         x = C.slice(gate_values, -1, 0, hidden_dim)
         forget = C.slice(gate_values, -1, hidden_dim, 2 * hidden_dim)

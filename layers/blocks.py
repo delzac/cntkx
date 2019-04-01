@@ -12,7 +12,7 @@ e.g. the LSTM block.
 from __future__ import division
 import numpy as np
 import cntk as C
-from cntk.layers import Stabilizer
+from cntk.layers import Stabilizer, SentinelValueForAutoSelectRandomSeed
 from cntk.variables import Constant, Parameter
 from cntk.ops import times, slice, sigmoid, tanh
 from cntk.internal import _as_tuple
@@ -26,10 +26,10 @@ from cntk.ops.functions import BlockFunction  # (deprecated)
 
 def _RecurrentBlock(type, shape, cell_shape, activation, use_peepholes,
                     init, init_bias,
-                    enable_self_stabilization,
+                    enable_self_stabilization, dropout_rate, seed,
                     name=''):
     '''
-    Helper to create a recurrent block of type 'WeightMaskedLSTM', 'GRU', or RNNStep.
+    Helper to create a recurrent block of type 'WeightDroppedLSTM', 'GRU', or RNNStep.
     '''
 
     has_projection = cell_shape is not None
@@ -48,13 +48,13 @@ def _RecurrentBlock(type, shape, cell_shape, activation, use_peepholes,
     cell_shape_list[stack_axis] = stacked_dim * {
         'RNNStep': 1,
         'GRU': 3,
-        'WeightMaskedLSTM': 4
+        'WeightDroppedLSTM': 4
     }[type]
     cell_shape_stacked = tuple(cell_shape_list)  # patched dims with stack_axis duplicated 4 times
     cell_shape_list[stack_axis] = stacked_dim * {
         'RNNStep': 1,
         'GRU': 2,
-        'WeightMaskedLSTM': 4
+        'WeightDroppedLSTM': 4
     }[type]
     cell_shape_stacked_H = tuple(cell_shape_list)  # patched dims with stack_axis duplicated 4 times
 
@@ -75,6 +75,9 @@ def _RecurrentBlock(type, shape, cell_shape, activation, use_peepholes,
     Sct = Stabilizer(enable_self_stabilization=enable_self_stabilization, name='c_stabilizer')
     Sht = Stabilizer(enable_self_stabilization=enable_self_stabilization, name='P_stabilizer')
 
+    # DropConnecet
+    droppout = C.layers.Dropout(dropout_rate=dropout_rate, seed=seed, name='h_dropout')
+
     # define the model function itself
     # general interface for Recurrence():
     #   (all previous outputs delayed, input) --> (outputs and state)
@@ -86,14 +89,14 @@ def _RecurrentBlock(type, shape, cell_shape, activation, use_peepholes,
     # LSTM model function
     # in this case:
     #   (dh, dc, x) --> (h, c)
-    def weight_masked_lstm(dh, dc, mask, x):
+    def weight_dropped_lstm(dh, dc, x):
 
         dhs = Sdh(dh)  # previous values, stabilized
         dcs = Sdc(dc)
         # note: input does not get a stabilizer here, user is meant to do that outside
 
         # projected contribution from input(s), hidden, and bias
-        proj4 = b + times(x, W) + times(dhs, mask * H)
+        proj4 = b + times(x, W) + times(dhs, droppout(H))
 
         it_proj  = slice (proj4, stack_axis, 0*stacked_dim, 1*stacked_dim)  # split along stack_axis
         bit_proj = slice (proj4, stack_axis, 1*stacked_dim, 2*stacked_dim)
@@ -122,7 +125,7 @@ def _RecurrentBlock(type, shape, cell_shape, activation, use_peepholes,
 
         # returns the new state as a tuple with names but order matters
         #return (Function.NamedOutput(h=h), Function.NamedOutput(c=c))
-        return h, c, mask + H * 0
+        return h, c
 
     # GRU model function
     # in this case:
@@ -174,16 +177,16 @@ def _RecurrentBlock(type, shape, cell_shape, activation, use_peepholes,
     function = {
         'RNNStep': rnn_step,
         'GRU':     gru,
-        'WeightMaskedLSTM':    weight_masked_lstm
+        'WeightDroppedLSTM':    weight_dropped_lstm
     }[type]
 
     # return the corresponding lambda as a CNTK Function
     return BlockFunction(type, name)(function)
 
 
-def WeightMaskedLSTM(shape, cell_shape=None, activation=default_override_or(tanh), use_peepholes=default_override_or(False),
+def WeightDroppedLSTM(shape, dropout_rate, cell_shape=None, activation=default_override_or(tanh), use_peepholes=default_override_or(False),
          init=default_override_or(glorot_uniform()), init_bias=default_override_or(0),
-         enable_self_stabilization=default_override_or(False),
+         enable_self_stabilization=default_override_or(False), seed=SentinelValueForAutoSelectRandomSeed,
          name=''):
     '''
     WDLSTM(shape, cell_shape=None, activation=tanh, use_peepholes=False, init=glorot_uniform(), init_bias=0, enable_self_stabilization=False, name='')
@@ -214,14 +217,14 @@ def WeightMaskedLSTM(shape, cell_shape=None, activation=default_override_or(tanh
         A function ``(prev_h, prev_c, input) -> (h, c)`` that implements one step of a recurrent LSTM layer.
     '''
 
-    activation                = get_default_override(WeightMaskedLSTM, activation=activation)
-    use_peepholes             = get_default_override(WeightMaskedLSTM, use_peepholes=use_peepholes)
-    init                      = get_default_override(WeightMaskedLSTM, init=init)
-    init_bias                 = get_default_override(WeightMaskedLSTM, init_bias=init_bias)
-    enable_self_stabilization = get_default_override(WeightMaskedLSTM, enable_self_stabilization=enable_self_stabilization)
+    activation                = get_default_override(WeightDroppedLSTM, activation=activation)
+    use_peepholes             = get_default_override(WeightDroppedLSTM, use_peepholes=use_peepholes)
+    init                      = get_default_override(WeightDroppedLSTM, init=init)
+    init_bias                 = get_default_override(WeightDroppedLSTM, init_bias=init_bias)
+    enable_self_stabilization = get_default_override(WeightDroppedLSTM, enable_self_stabilization=enable_self_stabilization)
 
-    return _RecurrentBlock('WeightMaskedLSTM', shape, cell_shape, activation=activation, use_peepholes=use_peepholes,
-                           init=init, init_bias=init_bias,
+    return _RecurrentBlock('WeightDroppedLSTM', shape, cell_shape, activation=activation, use_peepholes=use_peepholes,
+                           init=init, init_bias=init_bias, dropout_rate=dropout_rate, seed=seed,
                            enable_self_stabilization=enable_self_stabilization, name=name)
 
 

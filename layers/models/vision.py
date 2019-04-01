@@ -1,9 +1,9 @@
 import cntk as C
 import cntkx as Cx
 import numpy as np
-from cntk.layers import Convolution2D, Dropout, MaxPooling, BatchNormalization, AveragePooling
+from cntk.layers import Dropout, MaxPooling, BatchNormalization, AveragePooling
 from cntk.layers.blocks import identity
-from cntkx.layers import Conv2DMaxPool, Dense
+from cntkx.layers import Conv2DMaxPool, Dense, Convolution2D
 
 
 def VGG16(num_classes: int):

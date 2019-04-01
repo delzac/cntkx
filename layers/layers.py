@@ -2,14 +2,40 @@ import math
 import numpy as np
 import cntk as C
 import cntkx as Cx
-from cntkx.layers.blocks import WeightMaskedLSTM, _INFERRED
-from cntkx.layers.sequence import VariationalDropout
+from cntkx.layers.blocks import _INFERRED
 from cntk.default_options import default_override_or
 from cntk.layers.blocks import identity, _initializer_for, _inject_name
-from cntk.layers import SequentialConvolution, Recurrence, Embedding, Dropout
-from cntk.layers import MaxPooling, Convolution2D, LayerNormalization
+from cntk.layers import Recurrence, Embedding, Dropout
+from cntk.layers import MaxPooling, LayerNormalization
 from cntk.internal import _as_tuple
 from cntk.variables import Record
+
+
+def _window(x, axis, begin, end, step, stride, initial_state=None):
+    '''
+    helper to expand a sequence into a window, splicing them along the given axis (which must already exist)
+    '''
+    shifted = [
+        C.sequence.past_value(x, initial_state=initial_state, time_step=-t) if t < 0 else
+        x                                                        if t == 0 else
+        C.sequence.future_value(x, initial_state=initial_state, time_step=t)
+        for t in range(begin, end, step)
+    ]
+    r = C.splice(*shifted, axis=axis)
+    if stride != 1:
+        raise NotImplementedError('windowed convolution with stride not yet implemented')
+    return r
+
+
+# helper to expand options that can be specified as a single value
+def _pad_to_shape(filter_shape, param, what):
+    param = _as_tuple(param)
+    if len(param) == 1: # broadcast
+        while len(param) < len(filter_shape):
+            param = (param[0],) + param
+    if len(param) != len(filter_shape):
+        raise ValueError("{} parameter ({}) must be a scalar or have same number of elements as the filter_shape parameter ({})".format(what, param, filter_shape))
+    return param
 
 
 # TODO: To be removed once the main cntk line accepts the pull request to fix initialisation bug
@@ -305,6 +331,387 @@ def SinusoidalPositionalEmbedding(min_timescale=1.0, max_timescale=1.0e4, name: 
     return embedding
 
 
+# Sequential Convolution -- create a sequential convolution layer with optional non-linearity
+# This is the newer version that supports ND sequential convolution with arbitrary strides.
+#             ( (sample shape) +  (output shape) +  (reduction shape) + (spatial shape)   )
+#    in     : ( (sample shape) +                 +  (reduction shape) + (spatial shape)   )
+#    kernel : (                +  (output shape) +  (reduction shape) + (rec field shape) )
+#    out    : ( (sample shape) +  (output shape) +                    + (spatial shape)   )
+def SequentialConvolution(filter_shape,     # shape of receptive field, e.g. (3,3). filter_shape[0] is for sequence axis.
+                          num_filters=None, # e.g. 64 or None (which means 1 channel and don't add a dimension)
+                          activation=default_override_or(identity),
+                          init=default_override_or(C.glorot_uniform()),
+                          pad=default_override_or(False),
+                          strides=1,
+                          sharing=True,     # (must be True currently)
+                          bias=default_override_or(True),
+                          init_bias=default_override_or(0),
+                          reduction_rank=1, # (0 means input has no depth dimension, e.g. audio signal or B&W image)  --TODO: call it item_rank?
+                          transpose_weight=False,  # (must be False currently)
+                          dilation=1,
+                          groups=1,
+                          input_num_filters=None,
+                          max_temp_mem_size_in_samples=0,
+                          name=''):
+    '''
+    SequentialConvolution(filter_shape, num_filters=None, activation=identity, init=glorot_uniform(), pad=False, strides=1, sharing=True, bias=True, init_bias=0, reduction_rank=1, transpose_weight=False, dilation=1, groups=1, max_temp_mem_size_in_samples=0, op_name='Convolution', name='')
+
+    This implementation allows for (1) group convolution and (2) initialisation with reduction rank = 1, both of which
+    was not possible in the original cntk implementayion.
+
+    More details please refer to the original cntk documentation.
+
+    Args:
+     filter_shape (`int` or `tuple` of `ints`): shape (spatial extent) of the receptive field, *not* including the input feature-map depth. E.g. (3,3) for a 2D convolution.
+     num_filters (int, defaults to `None`): number of filters (output feature-map depth), or ``()`` to denote scalar output items (output shape will have no depth axis).
+     activation (:class:`~cntk.ops.functions.Function`, defaults to `identity`): optional function to apply at the end, e.g. `relu`
+     init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): initial value of weights `W`
+     pad (`bool` or `tuple` of `bools`, defaults to `False`): if `False`, then the filter will be shifted over the "valid"
+      area of input, that is, no value outside the area is used. If ``pad=True`` on the other hand,
+      the filter will be applied to all input positions, and positions outside the valid region will be considered containing zero.
+      Use a `tuple` to specify a per-axis value.
+     strides (`int` or `tuple` of `ints`, defaults to 1): stride of the convolution (increment when sliding the filter over the input). Use a `tuple` to specify a per-axis value.
+     sharing (bool, defaults to `True`): When `True`, every position uses the same Convolution kernel.  When `False`, you can have a different Convolution kernel per position, but `False` is not supported.
+     bias (bool, optional, defaults to `True`): the layer will have no bias if `False` is passed here
+     init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
+     reduction_rank (`int`, defaults to 1): set to 0 if input items are scalars (input has no depth axis), e.g. an audio signal or a black-and-white image
+      that is stored with tensor shape (H,W) instead of (1,H,W)
+     transpose_weight (bool, defaults to `False`): When this is `True` this is convolution, otherwise this is correlation (which is common for most toolkits)
+     dilation (tuple, optional): the dilation value along each axis, default 1 mean no dilation.
+     groups (`int`, default 1): number of groups during convolution, that controls the connections between input and output channels. Deafult value is 1,
+      which means that all input channels are convolved to produce all output channels. A value of N would mean that the input (and output) channels are
+      divided into N groups with the input channels in one group (say i-th input group) contributing to output channels in only one group (i-th output group).
+      Number of input and output channels must be divisble by value of groups argument. Also, value of this argument must be strictly positive, i.e. groups > 0.
+     input_num_filters (int): used for group convolution
+     max_temp_mem_size_in_samples (int, defaults to 0): Limits the amount of memory for intermediate convolution results.  A value of 0 means, memory is automatically managed.
+     name (str, defaults to ''): the name of the function instance in the network
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the sequential convolution operation to it
+    '''
+
+    activation = C.get_default_override(SequentialConvolution, activation=activation)
+    init       = C.get_default_override(SequentialConvolution, init=init)
+    pad        = C.get_default_override(SequentialConvolution, pad=pad)
+    bias       = C.get_default_override(SequentialConvolution, bias=bias)
+    init_bias  = C.get_default_override(SequentialConvolution, init_bias=init_bias)
+
+    # tuplify all tuple inputs that can also be given as scalars if rank 1
+    filter_shape = _as_tuple(filter_shape)
+    num_filters  = _as_tuple(num_filters or ())
+    filter_rank  = len(filter_shape)
+    strides      = _pad_to_shape(filter_shape, strides, 'strides')
+    sharing      = _pad_to_shape(filter_shape, sharing, 'sharing')
+    pad          = _pad_to_shape(filter_shape, pad, 'pad')
+    dilation     = _pad_to_shape(filter_shape, dilation, 'dilation')
+
+    if (reduction_rank != 0) and (reduction_rank != 1):
+        raise NotImplementedError("Convolution: reduction_rank must be 0 or 1")
+    if transpose_weight:
+        raise NotImplementedError("Convolution: transpose_weight option currently not supported")
+    if not sharing:
+        raise NotImplementedError("Convolution: sharing option currently must be True")
+    if (groups <= 0):
+        raise ValueError("Convolution: groups must be strictly positive, i.e. groups > 0.")
+
+    if input_num_filters and num_filters[0] % groups == 0 and input_num_filters % groups == 0:
+        input_num_filters = input_num_filters / groups
+        # TODO: work on groups, understand how reduction==0 and init=np might affect group which doesn't have inferred
+
+    # The convolution() function currently requires exactly one input and one output depth axis.
+    # So we emulate those dimensions on this level.
+    emulating_output_depth = num_filters == ()
+    emulating_input_depth  = reduction_rank == 0
+
+    actual_output_channels_shape = num_filters if not emulating_output_depth else (1,)
+    actual_reduction_shape       = _INFERRED
+    actual_filter_shape          = filter_shape
+
+    # add the dimension to the options as well
+    num_emulated_axes = emulating_input_depth
+    strides = (1,)     * num_emulated_axes + strides
+    sharing = (True,)  * num_emulated_axes + sharing
+    pad     = (False,) * num_emulated_axes + pad
+
+    kernel_shape = actual_reduction_shape + actual_filter_shape  # kernel := filter plus reductionDims
+
+    # init can be an np.array, which must have the correct dimensions subject to faking depth
+    # Once we no longer fake depth at this outer level, we can remove this.
+    if isinstance(init, np.ndarray):
+
+        if init.shape[-len(filter_shape):] != filter_shape and init.shape[0] != num_filters[0]:
+            raise ValueError(f"a constant initializer was passed that is of wrong shape {init.shape}")
+
+        init_kernel = init
+
+        # with no inferred axis in W and no emulated axis,
+        # padding must be explicit for all axes (channel, seq, static axes)
+        # typically, with inferred axis, pad omits channel pad, which is taken to be False. (seq, static axes)
+        # with emulate axis, the extra pad would have been supplied already
+        pad = (False, ) * reduction_rank + pad  # assume pad[0] is seq axis, pad[1:] is static axes
+    else:
+        init_kernel = _initializer_for(init, Record(filter_rank=filter_rank, output_rank=-len(actual_output_channels_shape)))
+
+    # parameters bound to this Function
+    # For sequential we must reduce bias filter rank by 1, as we get the rank from kernel filter shape,
+    # and that contains the seq axis which should be omitted.
+    bias_filter_rank = len(actual_filter_shape) - 1
+    W = C.Parameter(actual_output_channels_shape + kernel_shape,            init=init_kernel, name='W')                   # (K, C, W, H) aka [ H x W x C x K ]
+    b = C.Parameter(actual_output_channels_shape + (1,) * bias_filter_rank, init=init_bias,   name='b') if bias else None # (K,    1, 1) aka [ 1 x 1 x     K ]
+
+    # expression
+    @C.BlockFunction('SequentialConvolution', name)
+    def convolve(x):
+        # insert additional axes for various purposes
+        if reduction_rank == 0:  # only ever going to be 1 when reduction rank = 0
+            # x: (spatial_shape)
+            x = C.expand_dims(x, axis=C.Axis.new_leading_axis())  # e.g. (480, 640) -> (1, 480, 640)
+            # x: (in_depth or emulated_in_depth, spatial_shape)
+
+        # actual convolution
+        r = C.convolution(W, x,
+                          strides=strides,
+                          sharing=sharing,
+                          auto_padding=pad,
+                          sequential=True,
+                          dilation=dilation,
+                          groups=groups,
+                          max_temp_mem_size_in_samples=max_temp_mem_size_in_samples)
+
+        if bias:
+            r = r + b
+
+        # if no output dimension is desired, then strip it
+        # also need to strip the fake singleton axes, since they are not reduced away
+        num_axes_to_remove = emulating_output_depth
+        if num_axes_to_remove > 0:
+            # (out_depth, emulated axes, spatial_shape)
+            r = C.squeeze(r)  # e.g. (2000, 1, 480, 640) -> (2000, 480, 640)
+            # (out_depth, spatial_shape)
+
+        if activation is not None:
+            r = activation(r)
+
+        return r
+
+    return convolve
+
+
+def Convolution(filter_shape,     # shape of receptive field, e.g. (3,3)
+                num_filters=None, # e.g. 64 or None (which means 1 channel and don't add a dimension)
+                sequential=False, # time convolution if True (filter_shape[0] corresponds to dynamic axis)
+                activation=default_override_or(identity),
+                init=default_override_or(C.glorot_uniform()),
+                pad=default_override_or(False),
+                strides=1,
+                sharing=True,     # (must be True currently)
+                bias=default_override_or(True),
+                init_bias=default_override_or(0),
+                reduction_rank=1, # (0 means input has no depth dimension, e.g. audio signal or B&W image)  --TODO: call it item_rank?
+                transpose_weight=False,  # (must be False currently)
+                dilation=1,
+                groups=1,
+                max_temp_mem_size_in_samples=0,
+                op_name='Convolution',
+                name=''):
+    '''
+    Convolution(filter_shape, num_filters=None, sequential=False, activation=identity, init=glorot_uniform(), pad=False, strides=1, sharing=True, bias=True, init_bias=0, reduction_rank=1, transpose_weight=False, dilation=1, groups=1, max_temp_mem_size_in_samples=0, op_name='Convolution', name='')
+
+    This implementation allows for (1) group convolution and (2) initialisation with reduction rank = 1, both of which
+    was not possible in the original cntk implementayion.
+
+    More details please refer to the original cntk documentation.
+
+    Args:
+     filter_shape (`int` or `tuple` of `ints`): shape (spatial extent) of the receptive field, *not* including the input feature-map depth. E.g. (3,3) for a 2D convolution.
+     num_filters (int, defaults to `None`): number of filters (output feature-map depth), or ``()`` to denote scalar output items (output shape will have no depth axis).
+     sequential (bool, defaults to `False`): if `True`, also convolve along the dynamic axis. ``filter_shape[0]`` corresponds to dynamic axis.
+     activation (:class:`~cntk.ops.functions.Function`, defaults to `identity`): optional function to apply at the end, e.g. `relu`
+     init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): initial value of weights `W`
+     pad (`bool` or `tuple` of `bools`, defaults to `False`): if `False`, then the filter will be shifted over the "valid"
+      area of input, that is, no value outside the area is used. If ``pad=True`` on the other hand,
+      the filter will be applied to all input positions, and positions outside the valid region will be considered containing zero.
+      Use a `tuple` to specify a per-axis value.
+     strides (`int` or `tuple` of `ints`, defaults to 1): stride of the convolution (increment when sliding the filter over the input). Use a `tuple` to specify a per-axis value.
+     sharing (bool, defaults to `True`): When `True`, every position uses the same Convolution kernel.  When `False`, you can have a different Convolution kernel per position, but `False` is not supported.
+     bias (bool, optional, defaults to `True`): the layer will have no bias if `False` is passed here
+     init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
+     reduction_rank (`int`, defaults to 1): set to 0 if input items are scalars (input has no depth axis), e.g. an audio signal or a black-and-white image
+      that is stored with tensor shape (H,W) instead of (1,H,W)
+     transpose_weight (bool, defaults to `False`): When this is `True` this is convolution, otherwise this is correlation (which is common for most toolkits)
+     dilation (tuple, optional): the dilation value along each axis, default 1 mean no dilation.
+     groups (`int`, default 1): number of groups during convolution, that controls the connections between input and output channels. Deafult value is 1,
+      which means that all input channels are convolved to produce all output channels. A value of N would mean that the input (and output) channels are
+      divided into N groups with the input channels in one group (say i-th input group) contributing to output channels in only one group (i-th output group).
+      Number of input and output channels must be divisble by value of groups argument. Also, value of this argument must be strictly positive, i.e. groups > 0.
+     max_temp_mem_size_in_samples (int, defaults to 0): Limits the amount of memory for intermediate convolution results.  A value of 0 means, memory is automatically managed.
+     name (str, defaults to ''): the name of the function instance in the network
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the convolution operation to it
+    '''
+
+    activation = C.get_default_override(Convolution, activation=activation)
+    init       = C.get_default_override(Convolution, init=init)
+    pad        = C.get_default_override(Convolution, pad=pad)
+    bias       = C.get_default_override(Convolution, bias=bias)
+    init_bias  = C.get_default_override(Convolution, init_bias=init_bias)
+
+    # tuplify all tuple inputs that can also be given as scalars if rank 1
+    filter_shape = _as_tuple(filter_shape)
+    num_filters  = _as_tuple(num_filters or ())
+    filter_rank  = len(filter_shape)
+    strides      = _pad_to_shape(filter_shape, strides, 'strides')
+    sharing      = _pad_to_shape(filter_shape, sharing, 'sharing')
+    pad          = _pad_to_shape(filter_shape, pad, 'pad')
+    dilation     = _pad_to_shape(filter_shape, dilation, 'dilation')
+
+    if (reduction_rank != 0) and (reduction_rank != 1):
+        raise NotImplementedError("Convolution: reduction_rank must be 0 or 1")
+    if transpose_weight:
+        raise NotImplementedError("Convolution: transpose_weight option currently not supported")
+    if not sharing:
+        raise NotImplementedError("Convolution: sharing option currently must be True")
+    if groups <= 0:
+        raise ValueError("Convolution: groups must be strictly positive, i.e. groups > 0.")
+    if sequential:
+        raise ValueError("Use cntk.layers.SequentialConvolution instead")
+
+    # The convolution() function currently requires exactly one input and one output depth axis.
+    # So we emulate those dimensions on this level
+    emulating_output_depth = num_filters == ()
+    emulating_input_depth = reduction_rank == 0
+
+    actual_output_channels_shape = num_filters if not emulating_output_depth else (1,)
+    actual_reduction_shape = _INFERRED
+    actual_filter_shape = filter_shape
+
+    # add the dimension to the options as well
+    num_emulated_axes = emulating_input_depth
+    strides = (1,) * num_emulated_axes + strides
+    sharing = (True,) * num_emulated_axes + sharing
+    pad = (False,) * num_emulated_axes + pad
+
+    kernel_shape = actual_reduction_shape + actual_filter_shape  # kernel := filter plus reductionDims
+
+    # init can be an np.array, which must have the correct dimensions subject to faking depth
+    # Once we no longer fake depth at this outer level, we can remove this.
+    if isinstance(init, np.ndarray):
+
+        if init.shape[-len(filter_shape):] != filter_shape and init.shape[0] != num_filters[0]:
+            raise ValueError("a constant initializer was passed that is of wrong shape")
+
+        init_kernel = init
+
+        # with no inferred axis in W and no emulated axis,
+        # padding must be explicit for all axes (channel, static axes)
+        # typically, with inferred axis, pad omits channel pad, which is taken to be False. (static axes)
+        # with emulate axis, the extra pad would have been supplied already
+        pad = (False,) * reduction_rank + pad
+    else:
+        init_kernel = _initializer_for(init, Record(filter_rank=filter_rank, output_rank=-len(actual_output_channels_shape)))
+
+    # parameters bound to this Function
+    W = C.Parameter(actual_output_channels_shape + kernel_shape,                    init=init_kernel, name='W')                    # (K, C, H, W) aka [ W x H x C x K ]
+    b = C.Parameter(actual_output_channels_shape + (1,) * len(actual_filter_shape), init=init_bias,   name='b') if bias else None  # (K,    1, 1) aka [ 1 x 1 x     K ]
+
+    # expression
+    @C.BlockFunction(op_name, name)
+    def convolve(x):
+        # insert additional axis to emulate depth
+        if reduction_rank == 0:
+            # x: (spatial_shape)
+            x = C.expand_dims(x, axis=C.Axis.new_leading_axis())  # e.g. (480, 640) -> (1, 480, 640)
+            # x: (in_depth or emulated_in_depth, spatial_shape)
+
+        # actual convolution
+        r = C.convolution(W, x,
+                          strides=strides,
+                          sharing=sharing,
+                          auto_padding=pad,
+                          dilation=dilation,
+                          groups=groups,
+                          max_temp_mem_size_in_samples=max_temp_mem_size_in_samples)
+
+        if bias:
+            r = r + b
+
+        # if no output dimension is desired, then strip it
+        # also need to strip the fake singleton axes, since they are not reduced away
+        num_axes_to_remove = emulating_output_depth
+        if num_axes_to_remove > 0:
+            # (out_depth, emulated axes, spatial_shape)
+            r = C.squeeze(r)  # e.g. (2000, 1, 480, 640) -> (2000, 480, 640)
+            # (out_depth, spatial_shape)
+
+        if activation is not None:
+            r = activation(r)
+        return r
+
+    return convolve
+
+
+def Convolution2D(filter_shape,     # shape of receptive field, e.g. (3,3). Must be a 2-element tuple.
+                  num_filters=None, # e.g. 64 or None (which means 1 channel and don't add a dimension)
+                  activation=default_override_or(identity),
+                  init=default_override_or(C.glorot_uniform()),
+                  pad=default_override_or(False),
+                  strides=1,
+                  bias=default_override_or(True),
+                  init_bias=default_override_or(0),
+                  reduction_rank=1, # (0 means input has no depth dimension, e.g. audio signal or B&W image)
+                  dilation=1,
+                  groups=1,
+                  name=''):
+    '''
+    Convolution2D(filter_shape, num_filters=None, activation=identity, init=glorot_uniform(), pad=False, strides=1, bias=True, init_bias=0, reduction_rank=1, name='')
+
+    Layer factory function to create a 2D convolution layer with optional non-linearity.
+    Same as `Convolution()` except that filter_shape is verified to be 2-dimensional.
+    See `Convolution()` for extensive documentation.
+
+    Args:
+     filter_shape (`int` or `tuple` of `ints`): shape (spatial extent) of the receptive field, *not* including the input feature-map depth. E.g. (3,3) for a 2D convolution.
+     num_filters (int, defaults to `None`): number of filters (output feature-map depth), or ``()`` to denote scalar output items (output shape will have no depth axis).
+     activation (:class:`~cntk.ops.functions.Function`, defaults to `identity`): optional function to apply at the end, e.g. `relu`
+     init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): initial value of weights `W`
+     pad (`bool` or `tuple` of `bools`, defaults to `False`): if `False`, then the filter will be shifted over the "valid"
+      area of input, that is, no value outside the area is used. If ``pad=True`` on the other hand,
+      the filter will be applied to all input positions, and positions outside the valid region will be considered containing zero.
+      Use a `tuple` to specify a per-axis value.
+     strides (`int` or `tuple` of `ints`, defaults to 1): stride of the convolution (increment when sliding the filter over the input). Use a `tuple` to specify a per-axis value.
+     bias (bool, defaults to `True`): the layer will have no bias if `False` is passed here
+     init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
+     reduction_rank (`int`, defaults to 1): set to 0 if input items are scalars (input has no depth axis), e.g. an audio signal or a black-and-white image
+      that is stored with tensor shape (H,W) instead of (1,H,W)
+     dilation (tuple, optional): the dilation value along each axis, default 1 mean no dilation.
+     groups (`int`, default 1): number of groups during convolution, that controls the connections between input and output channels. Deafult value is 1,
+      which means that all input channels are convolved to produce all output channels. A value of N would mean that the input (and output) channels are
+      divided into N groups with the input channels in one group (say i-th input group) contributing to output channels in only one group (i-th output group).
+      Number of input and output channels must be divisble by value of groups argument. Also, value of this argument must be strictly positive, i.e. groups > 0.
+     name (str, defaults to ''): the name of the function instance in the network
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the convolution operation to it
+
+    '''
+
+    activation = C.get_default_override(Convolution2D, activation=activation)
+    init       = C.get_default_override(Convolution2D, init=init)
+    pad        = C.get_default_override(Convolution2D, pad=pad)
+    bias       = C.get_default_override(Convolution2D, bias=bias)
+    init_bias  = C.get_default_override(Convolution2D, init_bias=init_bias)
+    if len(_as_tuple(filter_shape)) > 2:
+         raise ValueError('Convolution2D: filter_shape must be a scalar or a 2D tuple, e.g. 3 or (3,3)')
+    filter_shape = _pad_to_shape((0,0), filter_shape, 'filter_shape')
+    return Convolution(filter_shape, num_filters=num_filters, activation=activation, init=init, pad=pad, sequential=False,
+                       strides=strides, sharing=True, bias=bias, init_bias=init_bias, reduction_rank=reduction_rank,
+                       dilation=dilation, groups=groups, op_name='Convolution2D', name=name)
+
+
 def Conv2DMaxPool(n, conv_filter_shape,  # shape of receptive field, e.g. (3,3). Must be a 2-element tuple.
                   pool_filter_shape,  # shape of receptive field, e.g. (3,3)
                   conv_num_filters=None,  # e.g. 64 or None (which means 1 channel and don't add a dimension)
@@ -439,6 +846,7 @@ def SequentialStride(input_ndim: int, dim_axis0: int, stride: int = 1, pad: bool
     # print('===========================================')
     # print('Sequential Stride')
     # print('-------------------------------------------')
+    # print(f'input_ndim:   {input_ndim}')
     # print(f'conv_num_filters:   {conv_num_filters}')
     # print(f'conv_filter:        {conv_filter}')
     # print(f'conv_strides:       {conv_strides}')
@@ -447,14 +855,9 @@ def SequentialStride(input_ndim: int, dim_axis0: int, stride: int = 1, pad: bool
     # print('===========================================')
 
     # set identity kernel into convolution layer
-    dummy_input_shape = (conv_num_filters, ) + (1,) * num_static_axes
-    dummy = C.sequence.input_variable(shape=dummy_input_shape, name='dummy')
-
-    strider = SequentialConvolution(filter_shape=conv_filter, num_filters=conv_num_filters,
+    strider = SequentialConvolution(filter_shape=conv_filter, num_filters=conv_num_filters, init=identity_kernel,
                                     bias=False, pad=conv_pad, strides=conv_strides, name='strider')
-    temp = strider(dummy)  # to initialise inferred dimension in kernel
-    strider.W.value = identity_kernel
-    strider = temp.clone(C.CloneMethod.freeze, {dummy: C.placeholder()})  # to work around bug
+    strider = strider.clone(C.CloneMethod.freeze)
 
     @C.BlockFunction('SequentialStride', name)
     def inner(x):
@@ -549,6 +952,7 @@ def SequentialMaxPooling(filter_shape,  # shape of receptive field, e.g. (3,3). 
 
         selected_windows = seq_stride(windows)
         # selected_windows: [#, **] [concat, channel, static_axes...]
+        # assert windows.shape == selected_windows.shape
 
         # Pooling between sequential elements done by reduce_max on windows
         # BUGBUG: do not set keepdims=False in reduce_max, will raise error
@@ -780,87 +1184,6 @@ def PretrainedBertPooler(tf_bert_model_filepath: str):
                                         name='pooler')
 
     return pretrained_bert_pooler
-
-
-def WeightDroppedLSTM(shape, dropconnect_rate: float = None, variational_dropout_rate_input: float = None,
-                      variational_dropout_rate_output: float = None,
-                      activation=default_override_or(C.tanh), use_peepholes=default_override_or(False),
-                      init=default_override_or(C.glorot_uniform()), init_bias=default_override_or(0),
-                      enable_self_stabilization=default_override_or(False), go_backwards=default_override_or(False),
-                      initial_state=default_override_or(0), return_full_state=False, name=''):
-    """ LSTM recurence layer with DropConnect and variational dropout applied
-
-    Weight dropped is implemented as DropConnect of hidden-to-hidden weight matrics, not the dropout of
-    hidden states (aka variational dropout).
-
-    For more details on Weight-Dropped LSTM, please read "regularizing and optimizing LSTM language models"
-    by S. Merity, at el (https://arxiv.org/abs/1708.02182)
-
-    Weight masked LSTM step function is available in cntkx.layers.blocks as WeightMaskedLSTM.
-
-    Note that in typical usage, the output of the last `WeightDroppedLSTM` layer in the rnn layer stack
-    should not be variationally dropped out (i.e. variational_dropout_rate_output should be set to zero).
-    This is advice is consistent with salesforce's implementation of awd-lstm
-    (https://github.com/salesforce/awd-lstm-lm/blob/master/model.py)
-
-    Examples:
-        a = C.sequence.input_variable(10)
-        b = Cx.layers.WeightDroppedLSTM(20, 0.1, 0.1, 0.1)(a)
-
-        assert b.shape == (20, )
-
-    Arguments:
-        shape (`int` or `tuple` of `ints`): vector or tensor dimension of the output of this layer
-        dropconnect_rate (float): probability of dropping out an element in dropconnect
-        variational_dropout_rate_input (float): probability of dropping out an input element
-        variational_dropout_rate_output (float): probability of dropping out an output element
-        activation (:class:`~cntk.ops.functions.Function`, defaults to :func:`~cntk.ops.tanh`): function to apply at the end, e.g. `relu`
-        use_peepholes (bool, defaults to `False`):
-        init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to `glorot_uniform`): initial value of weights `W`
-        init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
-        enable_self_stabilization (bool, defaults to `False`): if `True` then add a :func:`~cntk.layers.blocks.Stabilizer`
-         to all state-related projections (but not the data input)
-        go_backwards (bool, defaults to ``False``): if ``True`` then run the recurrence from the end of the sequence to the start.
-        initial_state (scalar or tensor without batch dimension; or a tuple thereof):
-          the initial value for the state. This can be a constant or a learnable parameter.
-          In the latter case, if the step function has more than 1 state variable,
-          this parameter must be a tuple providing one initial state for every state variable.
-        return_full_state (bool, defaults to ``False``): if ``True`` and the step function has more than one
-          state variable, then the layer returns a all state variables (a tuple of sequences);
-          whereas if not given or ``False``, only the first state variable is returned to the caller.
-        name (str, defaults to ''): the name of the Function instance in the network
-
-    """
-    dropout = C.layers.Dropout(dropconnect_rate)
-    variational_dropout_input = VariationalDropout(variational_dropout_rate_input) if variational_dropout_rate_input > 0 else None
-    variational_dropout_output = VariationalDropout(variational_dropout_rate_output) if variational_dropout_rate_output > 0 else None
-
-    lstm = WeightMaskedLSTM(shape=shape, activation=activation, use_peepholes=use_peepholes, init=init, init_bias=init_bias,
-                            enable_self_stabilization=enable_self_stabilization, name='WDLSTMCell')
-
-    @C.Function
-    def inner(x):
-
-        # mask for hidden-to-hidden weight that is the same for all temporal steps
-        dummy = C.slice(C.sequence.first(x), 0, 0, 1)
-        drop_connect = dropout(C.zeros_like(lstm.parameters[-1]) * dummy + C.constant(1))
-        drop_connect = C.sequence.broadcast_as(drop_connect, x)
-
-        @C.Function
-        def weight_dropped_lstm(h, c, x):
-
-            a, b, __ = lstm(h, c, drop_connect, x).outputs
-            return a, b
-
-        x = variational_dropout_input(x) if variational_dropout_input else x
-        output = Recurrence(weight_dropped_lstm, go_backwards=go_backwards, initial_state=initial_state,
-                            return_full_state=return_full_state)(x)
-
-        # dropout applied outside of rnn as rnn hidden-to-hidden already regularised by dropconnect
-        output = variational_dropout_output(output) if variational_dropout_output else output
-        return output
-
-    return _inject_name(inner, name)
 
 
 def PositionwiseFeedForward(model_dim: int, intermediate_dim: int, dropout_rate: float = None,

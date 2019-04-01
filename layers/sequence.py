@@ -11,6 +11,7 @@ from cntk.default_options import get_default_override, default_override_or
 from cntk.layers.sequence import _santize_step_function, RecurrenceFrom
 
 
+# TODO: Include RecurrenceFrom in here
 def Recurrence(step_function, go_backwards=default_override_or(False), initial_state=default_override_or(0),
                return_full_state=False, variational_dropout_rate_input=None,
                variational_dropout_rate_output=None, seed=SentinelValueForAutoSelectRandomSeed, name=''):

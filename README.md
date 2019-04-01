@@ -30,19 +30,23 @@ cntkx only works with python>=3.6
 | Layers | Description |
 | --- | ---|
 | `QRNN` | Quasi-Recurrent Neural Network |
-| `WeightDroppedLSTM` | A form of regularised LSTM |
+| `Recurrence` | With option to apply `VariationalDroppout` |
+| `VariationalDropout` | Single binary dropout mask for entire sequence |
 | `SinusoidalPositionalEmbedding` | Non-learnable positional embedding (no max sequence length) |
 | `PositionalEmbedding` | Learnable Positional Embedding (used in BERT) |
 | `BertEmbeddings` | BERT Embeddings (word + token_type + positional) |
 | `BertPooler` | Pooler used in BERT |
 | `SpatialPyramidPooling` | Fixed pooled representation regardless of image input size |
 | `GatedLinearUnit` | Gated Convolutional Neural Network |
-| `Variational Dropout` | Single binary dropout mask for entire sequence |
 | `ScaledDotProductAttention` | Attention used in BERT and Transformer (aka 'attention is all you need') |
 | `MultiHeadAttention` | Attention used in BERT and Transformer (aka 'attention is all you need') |
 | `GaussianWindowAttention` | Windowed attention instead of conventional attention where everything is attended at the same time |
 | `SequentialStride` | strides across sequential axis |
 | `SequentialMaxPooling` | Max pool across sequential axis and static axes |
+
+| Blocks | Description |
+| --- | ---|
+| `WeightDroppedLSTM` | A form of regularised LSTM |
 
 | Loss | Description |
 | --- | ---|
@@ -206,8 +210,8 @@ Example for `PreTrainedBertEmbeddings`
 
     
 ***2019-03-02.***
-#### Added `VariationalDrpoout` and `WeightDroppedLSTM`
-CNTK implementation of `VariationalDrpoout` found in 
+#### Added `VariationalDropout` and `WeightDroppedLSTM`
+CNTK implementation of `VariationalDropout` found in 
 [A Theoretically Grounded Application of Dropout in Recurrent Neural Networks](https://arxiv.org/abs/1512.05287)
 and `WeightDroppedLSTM` proposed in a salesforce research paper 
 [Regularizing and Optimizing LSTM Language Models](https://arxiv.org/abs/1708.02182).
@@ -222,15 +226,18 @@ which will result in a different dropout mask for every tensor along the sequenc
 
 
     import cntkx as Cx
+    from cntkx.layers import Recurrence, WeightDroppedLSTM
     import cntk as C
     
-    seq = C.sequence.input_variable(56)
-    hidden = Cx.layers.WeightDroppedLSTM(100,
-                                         dropconnect_rate=0.1,
-                                         variational_dropout_rate_input=0.1,
-                                         variational_dropout_rate_output=0.1)(seq)
+    dropconnect_rate = 0.2
+    variationaldrop_rate = 0.1
     
-    assert hidden.shape == (100, )
+    seq = C.sequence.input_variable(56)
+    b = Recurrence(WeightDroppedLSTM(20, dropconnect_rate),
+                   variational_dropout_rate_input=variationaldrop_rate,
+                   variational_dropout_rate_output=variationaldrop_rate)(seq)
+    
+    assert b.shape == (100, )
     
     seq_dropped = VariationalDropout(0.1)(seq)
     

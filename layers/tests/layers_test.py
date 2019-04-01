@@ -1,6 +1,7 @@
 import cntk as C
+import cntkx as Cx
 from cntkx.layers import QRNN, SinusoidalPositionalEmbedding, SpatialPyramidPooling, GatedLinearUnit
-from cntkx.layers import WeightDroppedLSTM, BertEmbeddings, PositionalEmbedding
+from cntkx.layers import BertEmbeddings, PositionalEmbedding
 from cntkx.layers import PreTrainedBertEmbeddings, PositionwiseFeedForward, SequentialMaxPooling
 from cntkx.layers import SequentialStride
 import numpy as np
@@ -91,27 +92,6 @@ def test_gated_linear_unit():
 
     n1 = np.random.random((odd_length, input_dim)).astype(np.float32)
     n2 = np.random.random((even_length, input_dim)).astype(np.float32)
-
-    b.eval({a: [n1, n2]})
-
-
-def test_weight_dropped_lstm():
-    a = C.sequence.input_variable(10)
-    b = WeightDroppedLSTM(20, 0.1, 0.1, 0.1)(a)
-
-    assert b.shape == (20, )
-
-    n1 = np.random.random((3, 10)).astype(np.float32)
-    n2 = np.random.random((6, 10)).astype(np.float32)
-
-    b.eval({a: [n1, n2]})
-
-    b = WeightDroppedLSTM(20, 0, 0, 0)(a)
-
-    assert b.shape == (20,)
-
-    n1 = np.random.random((3, 10)).astype(np.float32)
-    n2 = np.random.random((6, 10)).astype(np.float32)
 
     b.eval({a: [n1, n2]})
 
@@ -386,3 +366,338 @@ def test_sequential_max_pooling6():
     desired = np.squeeze(np.moveaxis(desired, -1, 1))
 
     np.testing.assert_almost_equal(output, desired)
+
+
+def test_convolution_2d():
+    # --------------------------------------------------------------------------
+    # Normal use case
+    # --------------------------------------------------------------------------
+    image_shape = (3, 32, 32)
+    a = C.input_variable(image_shape)
+    b = C.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=1, pad=True)(a)
+    c = Cx.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=1, pad=True,
+                                init=b.W.value, init_bias=b.b.value)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1, ) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    np.testing.assert_equal(actual, desired)
+
+    image_shape = (3, 32, 32)
+    a = C.input_variable(image_shape)
+    b = C.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=1, pad=(True, True))(a)
+    c = Cx.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=1, pad=(True, True),
+                                init=b.W.value, init_bias=b.b.value)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1,) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    np.testing.assert_equal(actual, desired)
+
+    # --------------------------------------------------------------------------
+    # Normal use case, no padding with stride 2
+    # --------------------------------------------------------------------------
+    image_shape = (3, 32, 32)
+    a = C.input_variable(image_shape)
+    b = C.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=1, pad=False, strides=2)(a)
+    c = Cx.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=1, pad=False, strides=2,
+                                init=b.W.value, init_bias=b.b.value)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1,) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    np.testing.assert_equal(actual, desired)
+
+    # --------------------------------------------------------------------------
+    # Normal use case, reduction rank = 0
+    # --------------------------------------------------------------------------
+    image_shape = (32, 32)
+    a = C.input_variable(image_shape)
+    b = C.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=0, pad=False, strides=2)(a)
+    c = Cx.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=0, pad=False, strides=2,
+                                init=b.W.value, init_bias=b.b.value)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1,) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    np.testing.assert_equal(actual, desired)
+
+    # --------------------------------------------------------------------------
+    # Normal use case, reduction rank = 0 with padding
+    # --------------------------------------------------------------------------
+    image_shape = (32, 32)
+    a = C.input_variable(image_shape)
+    b = C.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=0, pad=True, strides=2)(a)
+    c = Cx.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=0, pad=True, strides=2,
+                                init=b.W.value, init_bias=b.b.value)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1,) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    np.testing.assert_equal(actual, desired)
+
+    # --------------------------------------------------------------------------
+    # Normal use case, reduction rank = 0 with pad & stride on one dim
+    # --------------------------------------------------------------------------
+    image_shape = (32, 32)
+    a = C.input_variable(image_shape)
+    b = C.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=0, pad=(True, False), strides=(2, 1))(a)
+    c = Cx.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=0, pad=(True, False), strides=(2, 1),
+                                init=b.W.value, init_bias=b.b.value)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1,) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    np.testing.assert_equal(actual, desired)
+
+    # --------------------------------------------------------------------------
+    # Normal use case, reduction rank = 0 with pad & stride on one dim and no output depth
+    # --------------------------------------------------------------------------
+    image_shape = (32, 32)
+    a = C.input_variable(image_shape)
+    b = C.layers.Convolution2D(filter_shape=3, num_filters=None, reduction_rank=0, pad=(True, False), strides=(2, 1))(a)
+    c = Cx.layers.Convolution2D(filter_shape=3, num_filters=None, reduction_rank=0, pad=(True, False), strides=(2, 1),
+                                init=b.W.value, init_bias=b.b.value)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1,) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    np.testing.assert_equal(actual, desired)
+
+    # --------------------------------------------------------------------------
+    # Image is same size as kernel
+    # --------------------------------------------------------------------------
+    image_shape = (3, 3, 3)
+    a = C.input_variable(image_shape)
+    b = C.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=1, pad=True)(a)
+    c = Cx.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=1, pad=True,
+                                init=b.W.value, init_bias=b.b.value)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1, ) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    np.testing.assert_equal(actual, desired)
+
+    # --------------------------------------------------------------------------
+    # Image is same size as kernel, no padding
+    # --------------------------------------------------------------------------
+    image_shape = (3, 3, 3)
+    a = C.input_variable(image_shape)
+    b = C.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=1, pad=False)(a)
+    c = Cx.layers.Convolution2D(filter_shape=3, num_filters=16, reduction_rank=1, pad=False,
+                                init=b.W.value, init_bias=b.b.value)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1,) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    np.testing.assert_equal(actual, desired)
+
+    # --------------------------------------------------------------------------
+    # Check kernel initialised same shape
+    # --------------------------------------------------------------------------
+    image_shape = (32, 32)
+    a = C.input_variable(image_shape)
+    b = C.layers.Convolution2D(filter_shape=(3, 2), num_filters=None, reduction_rank=0, pad=(True, False), strides=(2, 1))(a)
+    c = Cx.layers.Convolution2D(filter_shape=(3, 2), num_filters=None, reduction_rank=0, pad=(True, False), strides=(2, 1))(a)
+
+    assert b.shape == c.shape
+    assert b.W.shape == c.W.shape
+    assert b.b.shape == c.b.shape
+
+    image_shape = (3, 32, 32)
+    a = C.input_variable(image_shape)
+    b = C.layers.Convolution2D(filter_shape=(3, 4), num_filters=None, reduction_rank=1, pad=(True, False), strides=(2, 1))(a)
+    c = Cx.layers.Convolution2D(filter_shape=(3, 4), num_filters=None, reduction_rank=1, pad=(True, False), strides=(2, 1))(a)
+
+    assert b.shape == c.shape
+    assert b.W.shape == c.W.shape
+    assert b.b.shape == c.b.shape
+
+
+def test_sequential_convolution():
+    # --------------------------------------------------------------------------
+    # Normal use case - image check kernel initialisation shape
+    # --------------------------------------------------------------------------
+    image_shape = (3, 32)  # rgb image of variable width
+    a = C.sequence.input_variable(image_shape)
+    b = C.layers.SequentialConvolution(filter_shape=(3, 3), num_filters=16, reduction_rank=1, pad=True)(a)
+    c = Cx.layers.SequentialConvolution(filter_shape=(3, 3), num_filters=16, reduction_rank=1, pad=True)(a)
+
+    assert b.shape == c.shape
+    assert b.W.shape == c.W.shape
+    assert b.b.shape == c.b.shape
+
+    image_shape = (32, )  # black and white image of variable width
+    a = C.sequence.input_variable(image_shape)
+    b = C.layers.SequentialConvolution(filter_shape=(2, 2), num_filters=16, reduction_rank=0, pad=True)(a)
+    c = Cx.layers.SequentialConvolution(filter_shape=(2, 2), num_filters=16, reduction_rank=0, pad=True)(a)
+
+    assert b.shape == c.shape
+    assert b.W.shape == c.W.shape
+    assert b.b.shape == c.b.shape
+
+    image_shape = (32,)  # text vector of variable sequence length
+    a = C.sequence.input_variable(image_shape)
+    b = C.layers.SequentialConvolution(filter_shape=(2, 2), num_filters=16, reduction_rank=1, pad=True)(a)
+    c = Cx.layers.SequentialConvolution(filter_shape=(2, 2), num_filters=16, reduction_rank=1, pad=True)(a)
+
+    assert b.shape == c.shape
+    assert b.W.shape == c.W.shape
+    assert b.b.shape == c.b.shape
+
+    # --------------------------------------------------------------------------
+    # Normal use case - image
+    # --------------------------------------------------------------------------
+    kernel_init = C.glorot_normal(seed=5)
+    image_shape = (3, 32)
+    width = 40
+    a = C.sequence.input_variable(image_shape)
+    b = C.layers.SequentialConvolution(filter_shape=(3, 3), num_filters=16, reduction_rank=1, pad=True, init=kernel_init)(a)
+    c = Cx.layers.SequentialConvolution(filter_shape=(3, 3), num_filters=16, reduction_rank=1, pad=True, init=kernel_init)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1, width) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    if isinstance(desired, list) and len(desired) == 1:
+        desired = desired[0]
+
+    if isinstance(actual, list) and len(actual) == 1:
+        actual = actual[0]
+
+    np.testing.assert_equal(actual, desired)
+
+    # --------------------------------------------------------------------------
+    # Normal use case - image, mix padding across axis
+    # --------------------------------------------------------------------------
+    kernel_init = C.glorot_normal(seed=5)
+    image_shape = (3, 32)
+    width = 40
+    a = C.sequence.input_variable(image_shape)
+    b = C.layers.SequentialConvolution(filter_shape=(3, 3), num_filters=16, reduction_rank=1, pad=(False, True), init=kernel_init)(a)
+    c = Cx.layers.SequentialConvolution(filter_shape=(3, 3), num_filters=16, reduction_rank=1, pad=(False, True), init=kernel_init)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1, width) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    if isinstance(desired, list) and len(desired) == 1:
+        desired = desired[0]
+
+    if isinstance(actual, list) and len(actual) == 1:
+        actual = actual[0]
+
+    np.testing.assert_equal(actual, desired)
+
+    # --------------------------------------------------------------------------
+    # Normal use case - vector data for qrnn implementation
+    # --------------------------------------------------------------------------
+    kernel_init = C.glorot_normal(seed=5)
+    image_shape = (25,)
+    width = 40
+    a = C.sequence.input_variable(image_shape)
+    b = C.layers.SequentialConvolution(filter_shape=(2, ), num_filters=16, reduction_rank=1, pad=True, init=kernel_init)(a)
+    c = Cx.layers.SequentialConvolution(filter_shape=(2,), num_filters=16, reduction_rank=1, pad=True, init=kernel_init)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1, width) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    if isinstance(desired, list) and len(desired) == 1:
+        desired = desired[0]
+
+    if isinstance(actual, list) and len(actual) == 1:
+        actual = actual[0]
+
+    np.testing.assert_equal(actual, desired)
+
+    # --------------------------------------------------------------------------
+    # Normal use case - B&W image
+    # --------------------------------------------------------------------------
+    kernel_init = C.glorot_normal(seed=5)
+    image_shape = (32, )
+    width = 40
+    a = C.sequence.input_variable(image_shape)
+    b = C.layers.SequentialConvolution(filter_shape=(3, 3), num_filters=16, reduction_rank=0, pad=True, init=kernel_init)(a)
+    c = Cx.layers.SequentialConvolution(filter_shape=(3, 3), num_filters=16, reduction_rank=0, pad=True, init=kernel_init)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1, width) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    if isinstance(desired, list) and len(desired) == 1:
+        desired = desired[0]
+
+    if isinstance(actual, list) and len(actual) == 1:
+        actual = actual[0]
+
+    np.testing.assert_equal(actual, desired)
+
+    image_shape = (32,)
+    width = 40
+    a = C.sequence.input_variable(image_shape)
+    b = C.layers.SequentialConvolution(filter_shape=(3, 3), num_filters=16, reduction_rank=0, pad=True)(a)
+    c = Cx.layers.SequentialConvolution(filter_shape=(3, 3), num_filters=16, reduction_rank=0, pad=True, init=b.W.value)(a)
+
+    assert b.shape == c.shape
+
+    n = np.random.random((1, width) + image_shape).astype(np.float32)
+
+    desired = b.eval({a: n})
+    actual = c.eval({a: n})
+
+    if isinstance(desired, list) and len(desired) == 1:
+        desired = desired[0]
+
+    if isinstance(actual, list) and len(actual) == 1:
+        actual = actual[0]
+
+    np.testing.assert_equal(actual, desired)

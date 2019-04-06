@@ -47,6 +47,8 @@ cntkx only works with python>=3.6
 | Blocks | Description |
 | --- | ---|
 | `WeightDroppedLSTM` | A form of regularised LSTM |
+| `IndyLSTM` | A parameter efficient form of LSTM |
+| `IndRNN` | a RNN with long memory and can be stacked deeply |
 
 | Loss | Description |
 | --- | ---|
@@ -78,6 +80,36 @@ and [DeepBelief_Course4_Examples](https://github.com/AllanYiin/DeepBelief_Course
 
 
 ## News
+***2019-04-06.***
+#### Added `IndyLSTM` and `IndRNN`
+CNTK implementation of [Independently Recurrent Long Short-term Memory cells: IndyLSTMs](https://arxiv.org/abs/1903.08023)
+by Gonnet and Deselaers, and [Independently Recurrent Neural Network (IndRNN): Building A Longer andDeeper RNN](https://arxiv.org/abs/1803.04831)
+by Li, et al.
+
+Both `IndyLSTM` and `IndRNN` have hidden-to-hidden weights that are diagonal matrix instead of the usual full matrix.
+Thus neurons in each layer are independent from each other, and the cross-channel information is 
+obtained through stacking multiple layers.
+
+`IndRNN` allows for the use of `C.relu` activation thus allowing multiple `IndRNN` layers to be stacked together deeply.
+
+`IndyLSTM` has parameters linear to the number of nodes in the linear, as opposed to standard LSTM that is quadratic
+making `IndyLSTM` potentially faster and smaller as a model.
+
+Authors of both `IndRNN` and `IndyLSTM` have claimed performance as good as or even better than regular LSTMs.
+
+Example:
+
+    import cntk as C
+    from cntkx.layers import IndyLSTM, IndRNN, Recurrence
+    
+    a = C.sequence.input_variable(10)
+    b = Recurrence(IndRNN(20))(a)
+    c = Recurrence(IndyLSTM(20))(a)
+    
+    assert b.shape == c.shape == (20,)
+
+
+
 ***2019-03-24.***
 #### Added `cntkx.layers.SequentialMaxPooling` and `cntkx.layers.SequentialStride`
 Add max pooling layer that works with sequential axis. Current cntk `MaxPooling` doesn't pool across sequence elements.

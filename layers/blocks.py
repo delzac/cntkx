@@ -46,14 +46,14 @@ def _RecurrentBlock(type, shape, cell_shape, activation, use_peepholes,
     cell_shape_list = list(cell_shape)
     stacked_dim = cell_shape_list[stack_axis]
     cell_shape_list[stack_axis] = stacked_dim * {
-        'RNNStep': 1,
-        'GRU': 3,
+        'IndRNN': 1,
+        'IndyLSTM': 4,
         'WeightDroppedLSTM': 4
     }[type]
     cell_shape_stacked = tuple(cell_shape_list)  # patched dims with stack_axis duplicated 4 times
     cell_shape_list[stack_axis] = stacked_dim * {
-        'RNNStep': 1,
-        'GRU': 2,
+        'IndRNN': 1,
+        'IndyLSTM': 4,
         'WeightDroppedLSTM': 4
     }[type]
     cell_shape_stacked_H = tuple(cell_shape_list)  # patched dims with stack_axis duplicated 4 times
@@ -62,7 +62,8 @@ def _RecurrentBlock(type, shape, cell_shape, activation, use_peepholes,
     b  = Parameter(            cell_shape_stacked,   init=init_bias, name='b')                              # bias
     W  = Parameter(_INFERRED + cell_shape_stacked,   init=init,      name='W')                              # input
     H  = Parameter(shape     + cell_shape_stacked_H, init=init,      name='H')                              # hidden-to-hidden
-    H1 = Parameter(shape     + cell_shape,           init=init,      name='H1') if type == 'GRU' else None  # hidden-to-hidden
+    H1 = Parameter(            cell_shape_stacked_H, init=init,      name='H1') if type == 'IndyLSTM' else None  # hidden-to-hidden
+    H2 = Parameter(shape                 ,           init=init,      name='H2') if type == 'IndRNN' else None  # hidden-to-hidden
     Ci = Parameter(            cell_shape,           init=init,      name='Ci') if use_peepholes else None  # cell-to-hiddden {note: applied elementwise}
     Cf = Parameter(            cell_shape,           init=init,      name='Cf') if use_peepholes else None  # cell-to-hiddden {note: applied elementwise}
     Co = Parameter(            cell_shape,           init=init,      name='Co') if use_peepholes else None  # cell-to-hiddden {note: applied elementwise}
@@ -107,76 +108,70 @@ def _RecurrentBlock(type, shape, cell_shape, activation, use_peepholes,
         def peep(x, c, C):
             return x + C * c if use_peepholes else x
 
-        it = sigmoid (peep (it_proj, dcs, Ci))        # input gate(t)
+        it = sigmoid(peep(it_proj, dcs, Ci))  # input gate(t)
         # TODO: should both activations be replaced?
-        bit = it * activation (bit_proj)              # applied to tanh of input network
+        bit = it * activation(bit_proj)  # applied to tanh of input network
 
-        ft = sigmoid (peep (ft_proj, dcs, Cf))        # forget-me-not gate(t)
-        bft = ft * dc                                 # applied to cell(t-1)
+        ft = sigmoid(peep(ft_proj, dcs, Cf))  # forget-me-not gate(t)
+        bft = ft * dc  # applied to cell(t-1)
 
-        ct = bft + bit                                # c(t) is sum of both
+        ct = bft + bit  # c(t) is sum of both
 
-        ot = sigmoid (peep (ot_proj, Sct(ct), Co))    # output gate(t)
-        ht = ot * activation (ct)                     # applied to tanh(cell(t))
+        ot = sigmoid(peep(ot_proj, Sct(ct), Co))  # output gate(t)
+        ht = ot * activation(ct)  # applied to tanh(cell(t))
 
-        c = ct                                        # cell value
-        h = times(Sht(ht), Wmr) if has_projection else \
-            ht
+        c = ct  # cell value
+        h = times(Sht(ht), Wmr) if has_projection else ht
 
-        # returns the new state as a tuple with names but order matters
-        #return (Function.NamedOutput(h=h), Function.NamedOutput(c=c))
         return h, c
 
-    # GRU model function
+    # LSTM model function
     # in this case:
-    #   (dh, x) --> (h)
-    # e.g. https://en.wikipedia.org/wiki/Gated_recurrent_unit
-    def gru(dh, x):
+    #   (dh, dc, x) --> (h, c)
+    def indy_lstm(dh, dc, x):
 
-        dhs = Sdh(dh)  # previous value, stabilized
+        dhs = Sdh(dh)  # previous values, stabilized
+        dcs = Sdc(dc)
         # note: input does not get a stabilizer here, user is meant to do that outside
 
         # projected contribution from input(s), hidden, and bias
-        projx3 = b + times(x, W)
-        projh2  = times(dhs, H)
+        proj4 = b + times(x, W) + C.splice(dhs, dhs, dhs, dhs) * H1  # 4 is the number of stacked dim
 
-        zt_proj = slice (projx3, stack_axis, 0*stacked_dim, 1*stacked_dim) + slice (projh2, stack_axis, 0*stacked_dim, 1*stacked_dim)
-        rt_proj = slice (projx3, stack_axis, 1*stacked_dim, 2*stacked_dim) + slice (projh2, stack_axis, 1*stacked_dim, 2*stacked_dim)
-        ct_proj = slice (projx3, stack_axis, 2*stacked_dim, 3*stacked_dim)
+        it_proj  = slice (proj4, stack_axis, 0*stacked_dim, 1*stacked_dim)  # split along stack_axis
+        bit_proj = slice (proj4, stack_axis, 1*stacked_dim, 2*stacked_dim)
+        ft_proj  = slice (proj4, stack_axis, 2*stacked_dim, 3*stacked_dim)
+        ot_proj  = slice (proj4, stack_axis, 3*stacked_dim, 4*stacked_dim)
 
-        zt = sigmoid (zt_proj)        # update gate z(t)
+        # helper to inject peephole connection if requested
+        def peep(x, c, C):
+            return x + C * c if use_peepholes else x
 
-        rt = sigmoid (rt_proj)        # reset gate r(t)
+        it = sigmoid(peep(it_proj, dcs, Ci))  # input gate(t)
+        # TODO: should both activations be replaced?
+        bit = it * activation(bit_proj)  # applied to tanh of input network
 
-        rs = dhs * rt        # "cell" c
-        ct = activation (ct_proj + times(rs, H1))
+        ft = sigmoid(peep(ft_proj, dcs, Cf))  # forget-me-not gate(t)
+        bft = ft * dc  # applied to cell(t-1)
 
-        ht = (1 - zt) * ct + zt * dhs # hidden state ht / output
+        ct = bft + bit  # c(t) is sum of both
 
-        # for comparison: CUDNN_GRU
-        # i(t) = sigmoid(W_i x(t) +          R_i h(t-1)  + b_Wi + b_Ru)
-        # r(t) = sigmoid(W_r x(t) +          R_r h(t-1)  + b_Wr + b_Rr)   --same up to here
-        # h'(t) =   tanh(W_h x(t) + r(t) .* (R_h h(t-1)) + b_Wh + b_Rh)   --r applied after projection? Would make life easier!
-        # h(t) = (1 - i(t) .* h'(t)) + i(t) .* h(t-1)                     --TODO: need to confirm bracketing with NVIDIA
+        ot = sigmoid(peep(ot_proj, Sct(ct), Co))  # output gate(t)
+        ht = ot * activation(ct)  # applied to tanh(cell(t))
 
-        h = times(Sht(ht), Wmr) if has_projection else \
-            ht
+        c = ct  # cell value
+        h = times(Sht(ht), Wmr) if has_projection else ht
 
-        # returns the new state as a tuple with names but order matters
-        #return Function.NamedOutput(h=h)
-        return h
+        return h, c
 
-    def rnn_step(dh, x):
+    def ind_rnn(dh, x):
         dhs = Sdh(dh)  # previous value, stabilized
-        ht = activation (times(x, W) + times(dhs, H) + b)
-        h = times(Sht(ht), Wmr) if has_projection else \
-            ht
-        #return Function.NamedOutput(h=h)
+        ht = activation(times(x, W) + dhs * H2 + b)
+        h = times(Sht(ht), Wmr) if has_projection else ht
         return h
 
     function = {
-        'RNNStep': rnn_step,
-        'GRU':     gru,
+        'IndRNN': ind_rnn,
+        'IndyLSTM': indy_lstm,
         'WeightDroppedLSTM':    weight_dropped_lstm
     }[type]
 
@@ -197,8 +192,8 @@ def WeightDroppedLSTM(shape, dropout_rate, cell_shape=None, activation=default_o
 
     Example:
      >>> # a typical recurrent LSTM layer
-     >>> from cntk.layers import *
-     >>> lstm_layer = Recurrence(LSTM(500))
+     >>> from cntkx.layers import *
+     >>> lstm_layer = Recurrence(WeightDroppedLSTM(500))
 
     Args:
         shape (`int` or `tuple` of `ints`): vector or tensor dimension of the output of this layer
@@ -228,26 +223,35 @@ def WeightDroppedLSTM(shape, dropout_rate, cell_shape=None, activation=default_o
                            enable_self_stabilization=enable_self_stabilization, name=name)
 
 
-def RNNStep(shape, cell_shape=None, activation=default_override_or(sigmoid),
+# TODO: change activation default to relu and implement weight constraint
+def IndRNN(shape, activation=default_override_or(sigmoid),
             init=default_override_or(glorot_uniform()), init_bias=default_override_or(0),
-            enable_self_stabilization=default_override_or(False),
-            name=''):
-    '''
-    RNNStep(shape, cell_shape=None, activation=sigmoid, init=glorot_uniform(), init_bias=0, enable_self_stabilization=False, name='')
+            enable_self_stabilization=default_override_or(False), name=''):
+    """
+    IndRNN implementation found in "Independently Recurrent Neural Network (IndRNN): Building A Longer andDeeper RNN"
+    by Li, et al (https://arxiv.org/abs/1803.04831).
 
-    Layer factory function to create a plain RNN block for use inside a recurrence.
-    The RNN block implements one step of the recurrence and is stateless. It accepts the previous state as its first argument,
-    and outputs its new state.
+    IndRNN are RNNS where neurons in each layer are independent from each other, and the cross-channel information is
+    obtained through stacking multiple layers.
+
+    It has been shown that an IndRNN can be easily regulated to prevent the gradient exploding and vanishing problems
+    while allowing the networkto learn long-term dependencies. Moreover, an IndRNN can work with non-saturated
+    activation functions such as relu (rectified linear unit) and be still trained robustly.
+    Multiple IndRNNs can be stacked to construct a network that is deeper than the existing RNNs.
+    Experimental results have shown that the proposed IndRNN is able to process very long
+    sequences (over 5000 time steps), can be used to construct very deep networks (21 layers used in the experiment)
+    and still be trained robustly. Better performances have been achieved on various tasks by using IndRNNs compared
+    with the traditional RNN and LSTM.
+
+    The original code is available at: https://github.com/Sunnydreamrain/IndRNN_Theano_Lasagne.
 
     Example:
      >>> # a plain relu RNN layer
-     >>> from cntk.layers import *
-     >>> relu_rnn_layer = Recurrence(RNNStep(500, activation=C.relu))
+     >>> from cntkx.layers import *
+     >>> relu_rnn_layer = Recurrence(IndRNN(500))
 
     Args:
         shape (`int` or `tuple` of `ints`): vector or tensor dimension of the output of this layer
-        cell_shape (tuple, defaults to `None`): if given, then the output state is first computed at `cell_shape`
-         and linearly projected to `shape`
         activation (:class:`~cntk.ops.functions.Function`, defaults to signmoid): function to apply at the end, e.g. `relu`
         init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to `glorot_uniform`): initial value of weights `W`
         init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
@@ -257,34 +261,37 @@ def RNNStep(shape, cell_shape=None, activation=default_override_or(sigmoid),
 
     Returns:
         :class:`~cntk.ops.functions.Function`:
-        A function ``(prev_h, input) -> h`` where ``h = activation(input @ W + prev_h @ R + b)``
-    '''
+        A function ``(prev_h, input) -> h`` where ``h = activation(input @ W + prev_h * R + b)``
+    """
 
-    activation                = get_default_override(RNNStep, activation=activation)
-    init                      = get_default_override(RNNStep, init=init)
-    init_bias                 = get_default_override(RNNStep, init_bias=init_bias)
-    enable_self_stabilization = get_default_override(RNNStep, enable_self_stabilization=enable_self_stabilization)
+    activation                = get_default_override(IndRNN, activation=activation)
+    init                      = get_default_override(IndRNN, init=init)
+    init_bias                 = get_default_override(IndRNN, init_bias=init_bias)
+    enable_self_stabilization = get_default_override(IndRNN, enable_self_stabilization=enable_self_stabilization)
 
-    return _RecurrentBlock('RNNStep', shape, cell_shape, activation=activation, use_peepholes=False,
-                           init=init, init_bias=init_bias,
+    return _RecurrentBlock('IndRNN', shape, None, activation=activation, use_peepholes=False,
+                           init=init, init_bias=init_bias, dropout_rate=0, seed=SentinelValueForAutoSelectRandomSeed,
                            enable_self_stabilization=enable_self_stabilization, name=name)
 
 
-def GRU(shape, cell_shape=None, activation=default_override_or(tanh),
-        init=default_override_or(glorot_uniform()), init_bias=default_override_or(0),
-        enable_self_stabilization=default_override_or(False),
-        name=''):
-    '''
-    GRU(shape, cell_shape=None, activation=tanh, init=glorot_uniform(), init_bias=0, enable_self_stabilization=False, name='')
+def IndyLSTM(shape, activation=default_override_or(tanh),
+            init=default_override_or(glorot_uniform()), init_bias=default_override_or(0),
+            enable_self_stabilization=default_override_or(False), name=''):
+    """
+    Implementation of Independently Recurrent Long Short-term Memory cells: IndyLSTMs by Gonnet and Deselaers.
+    Paper can be found at https://arxiv.org/abs/1903.08023
 
-    Layer factory function to create a GRU block for use inside a recurrence.
-    The GRU block implements one step of the recurrence and is stateless. It accepts the previous state as its first argument,
-    and outputs its new state.
+    IndyLSTM differ from regular LSTM cells in that the recurrent weights are not modeled as a full matrix,
+    but as a diagonal matrix, i.e. the output and state of each LSTM cell depends on the inputs and its
+    own output/state, as opposed to the input and the outputs/states of all the cells in the layer.
+    The number of parameters per IndyLSTM layer, and thus the number of FLOPS per evaluation, is linear in the
+    number of nodes in the layer, as opposed to quadratic for regular LSTM layers, resulting in potentially both
+    smaller and faster model.
 
     Example:
      >>> # a gated recurrent layer
-     >>> from cntk.layers import *
-     >>> gru_layer = Recurrence(GRU(500))
+     >>> from cntkx.layers import *
+     >>> indy_lstm_layer = Recurrence(IndyLSTM(500))
 
     Args:
         shape (`int` or `tuple` of `ints`): vector or tensor dimension of the output of this layer
@@ -299,14 +306,14 @@ def GRU(shape, cell_shape=None, activation=default_override_or(tanh),
 
     Returns:
         :class:`~cntk.ops.functions.Function`:
-        A function ``(prev_h, input) -> h`` that implements one step of a recurrent GRU layer.
-    '''
+        A function ``(prev_h, prev_c, input) -> (h, c)`` that implements one step of a recurrent IndyLSTM layer.
+    """
 
-    activation                = get_default_override(GRU, activation=activation)
-    init                      = get_default_override(GRU, init=init)
-    init_bias                 = get_default_override(GRU, init_bias=init_bias)
-    enable_self_stabilization = get_default_override(GRU, enable_self_stabilization=enable_self_stabilization)
+    activation                = get_default_override(IndyLSTM, activation=activation)
+    init                      = get_default_override(IndyLSTM, init=init)
+    init_bias                 = get_default_override(IndyLSTM, init_bias=init_bias)
+    enable_self_stabilization = get_default_override(IndyLSTM, enable_self_stabilization=enable_self_stabilization)
 
-    return _RecurrentBlock('GRU', shape, cell_shape, activation=activation, use_peepholes=False,
-                           init=init, init_bias=init_bias,
+    return _RecurrentBlock('IndyLSTM', shape, None, activation=activation, use_peepholes=False,
+                           init=init, init_bias=init_bias, dropout_rate=0, seed=SentinelValueForAutoSelectRandomSeed,
                            enable_self_stabilization=enable_self_stabilization, name=name)

@@ -1,5 +1,8 @@
 import cntk as C
+import cntkx as Cx
 from cntk.layers import Recurrence
+from math import pi
+import numpy as np
 
 
 @C.typemap
@@ -57,16 +60,38 @@ def position(x, name=''):
     Arguments:
         x: input sequence tensor
         name (str): name of function
+
     Returns:
         :class:`~cntk.ops.functions.Function`
         a sequence tensor of shape (1,) with value of 0 to `seq_length` depending on position
     """
-    @C.Function
-    def pos(p, x):
-        return p + x * 0 + 1
 
-    # tensor op cannot be applied to sparse tensor
-    if x.is_sparse:
-        x = C.zeros_like(x)
+    @C.BlockFunction('position', name)
+    def inner(a):
+        # reconcile_dynamic_axes is necessary to avoid subtle bugs e.g. sequence.where and one_hot
+        return C.reconcile_dynamic_axes(C.sequence.where(C.ones_like(Cx.scalar(a))), a)
 
-    return Recurrence(pos, initial_state=C.constant(-1), name=name)(C.slice(x, 0, 0, 1))  # {#, *] [1,]
+    return inner(x)  # {#, *] [1,]
+
+
+def stride(x, s: int, tol: float = 0.1):
+    """ Strides across sequential axis
+
+    Note:
+        Tested to work up to 1,000,000 sequence items. Beyond that tuning of `tol` might be necessary.
+
+    Arguments:
+        x: input sequence tensor
+        s (int): sequential stride
+        tol (float): tolerance due to precision error of applying `sin` function, valid seq item not exactly zero.
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+        Every `s` sequence item of `x` starting from the first sequence item
+
+    """
+    p = position(x)
+    integers = p / s  # every s sequence item will be an integer
+    valid = C.less_equal(C.abs(C.sin(integers * pi)), tol)  # sin of integer multiple of pi will return close to zero
+    result = C.sequence.gather(x, valid)
+    return result

@@ -1,7 +1,17 @@
 import cntk as C
-from cntkx.ops import cumsum, hardmax, erf, batchmatmul
+from cntkx.ops import cumsum, hardmax, erf, batchmatmul, scalar
 import numpy as np
 from numpy.testing import assert_equal
+
+
+def test_scalar():
+    a = C.input_variable((3, 64, 64))
+    b = scalar(a)
+
+    assert b.shape == (1,)
+
+    n = np.random.random((10, 3, 64, 64)).astype(np.float32)
+    b.eval({a: n})
 
 
 def test_cumsum():

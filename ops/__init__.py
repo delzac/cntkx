@@ -8,6 +8,22 @@ from cntk.layers.blocks import _inject_name
 ##########################################################################
 # linear ops
 ##########################################################################
+def scalar(x, name=''):
+    """ select first element of x with shape (1,)
+
+    Arguments:
+        x: input tensor
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+        a scalar of shape (1,)
+    """
+    @C.BlockFunction('scalar', name)
+    def inner(x):
+        return C.slice(C.reshape(x, (-1,)), 0, 0, 1)
+
+    return inner(x)
+
 
 def cumsum(x, axis: int = -1):
     """ Calculates the cumulative sum across a static axis

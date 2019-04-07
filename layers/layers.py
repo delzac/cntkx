@@ -806,66 +806,6 @@ def SpatialPyramidPooling(bins: tuple, name=''):
     return spp
 
 
-def SequentialStride(input_ndim: int, dim_axis0: int, stride: int = 1, pad: bool = True, name: str = ''):
-    """ Strides across the sequential axis
-
-    Example:
-        a = C.sequence.input_variable((3, 10))
-        b = SequentialStride(input_ndim=2, dim_axis0=3, stride=2, pad=False)(a
-
-        assert b.shape == a.shape
-        # b has all odd sequence element due to stride=2
-
-    Arguments:
-        input_ndim (int): number of dimensions in input tensor
-        dim_axis0 (int): dimension of first axis of input tensor, i.e. input_tensor.shape[0]
-        stride (int): stride across sequential axis
-        pad (bool): whether to pad sequential axis
-        name (str): name of function instance in network
-
-    Returns:
-        :class:`~cntk.ops.functions.Function`:
-
-    """
-
-    # create dummy pad/stride/filter for static axes
-    num_static_axes = (input_ndim - 1)
-    conv_pad = (pad, ) + (False,) * num_static_axes
-    conv_strides = (stride, ) + (1,) * num_static_axes
-    conv_filter = (1,) + (1,) * num_static_axes
-    conv_num_filters = dim_axis0
-
-    assert len(conv_pad) == len(conv_strides) == len(conv_filter) == 1 + num_static_axes
-
-    identity_kernel = np.eye(conv_num_filters, conv_num_filters)
-    identity_kernel = identity_kernel.reshape((conv_num_filters, conv_num_filters) + (1,) * len(conv_filter))
-
-    for i, d in enumerate(conv_filter):
-        identity_kernel = np.repeat(identity_kernel, d, axis=2 + i)
-
-    # print('===========================================')
-    # print('Sequential Stride')
-    # print('-------------------------------------------')
-    # print(f'input_ndim:   {input_ndim}')
-    # print(f'conv_num_filters:   {conv_num_filters}')
-    # print(f'conv_filter:        {conv_filter}')
-    # print(f'conv_strides:       {conv_strides}')
-    # print(f'conv_pad:           {conv_pad}')
-    # print(f'identity_kernel:    {identity_kernel.shape}')
-    # print('===========================================')
-
-    # set identity kernel into convolution layer
-    strider = SequentialConvolution(filter_shape=conv_filter, num_filters=conv_num_filters, init=identity_kernel,
-                                    bias=False, pad=conv_pad, strides=conv_strides, name='strider')
-    strider = strider.clone(C.CloneMethod.freeze)
-
-    @C.BlockFunction('SequentialStride', name)
-    def inner(x):
-        return strider(x)
-
-    return inner
-
-
 def SequentialMaxPooling(filter_shape,  # shape of receptive field, e.g. (3,3). filter_shape[0] is for sequence axis.
                          strides=1,     # strides[0] is for sequence axis.
                          pad=default_override_or(True),   # pad[0] is for sequence axis.
@@ -917,13 +857,6 @@ def SequentialMaxPooling(filter_shape,  # shape of receptive field, e.g. (3,3). 
     pool_pad = pad[1:]
     pool_strides = strides[1:]
 
-    window_dim = 1 + 1 + len(filter_shape[1:])  # concat axis + channel axis + any other static axes
-    seq_stride = SequentialStride(input_ndim=window_dim,             # concat axis
-                                  dim_axis0=filter_shape[0],         # window/kernel size in seq axis
-                                  stride=strides[0],
-                                  pad=pad[0],
-                                  name='seq_stride')
-
     # static_pool over (channel_static_axis, height_static_axis)
     if pool_filter_shape and pool_strides and pool_pad:
         static_pooler = MaxPooling(filter_shape=filter_shape[1:], strides=pool_strides, pad=pool_pad, name='static_pooler')
@@ -950,7 +883,7 @@ def SequentialMaxPooling(filter_shape,  # shape of receptive field, e.g. (3,3). 
         windows = C.splice(*past_now_future, axis=C.Axis.new_leading_axis())
         # windows: [#, *] [concat, channel, static_axes...]
 
-        selected_windows = seq_stride(windows)
+        selected_windows = Cx.sequence.stride(windows, strides[0])
         # selected_windows: [#, **] [concat, channel, static_axes...]
         # assert windows.shape == selected_windows.shape
 
@@ -1037,7 +970,7 @@ def PositionalEmbedding(max_seq_length: int, hidden_dim: int, init=default_overr
     @C.BlockFunction('PositionalEmbedding', name)
     def inner(x):
         position_index = Cx.sequence.position(x)
-        pos = C.one_hot(position_index, max_seq_length, sparse_output=True) >> C.squeeze
+        pos = C.one_hot(position_index, max_seq_length, sparse_output=True)
         embedded = position_embeddings(pos)
         return embedded
 

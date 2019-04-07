@@ -15,15 +15,17 @@ cntkx only works with python>=3.6
 ## Available Components
 | ops | Description |
 | --- | ---|
+| `scalar` | cast tensor to scalar (1,) |
 | `cumsum` | Cumulative summation along axis |
 | `upsample` | Upsample by 2x (for image) |
-| `centre_crop` | Crop centre of image (convenience function) |
-| `swish` | Activation (convenience function) |
-| `hardmax` | Activation (convenience function) |
+| `centre_crop` | Crop centre of image |
+| `swish` | Activation |
+| `hardmax` | Activation |
 | `erf` | Error function |
 | `sequence.pad` | Pad at start or end of sequence axis |
 | `sequence.length` | length of sequence |
 | `sequence.position` | position of every sequence element |
+| `sequence.stride` | strides across sequential axis  |
 | `random.sample` | Samples a given probability distribution |
 | `batchmatmul` | Batch Matrix Multiplication on a static batch axis, similar to tf.matmul |
 
@@ -41,7 +43,6 @@ cntkx only works with python>=3.6
 | `ScaledDotProductAttention` | Attention used in BERT and Transformer (aka 'attention is all you need') |
 | `MultiHeadAttention` | Attention used in BERT and Transformer (aka 'attention is all you need') |
 | `GaussianWindowAttention` | Windowed attention instead of conventional attention where everything is attended at the same time |
-| `SequentialStride` | strides across sequential axis |
 | `SequentialMaxPooling` | Max pool across sequential axis and static axes |
 
 | Blocks | Description |
@@ -80,6 +81,13 @@ and [DeepBelief_Course4_Examples](https://github.com/AllanYiin/DeepBelief_Course
 
 
 ## News
+***2019-04-07.***
+#### Added `cntkx.sequence.stride` and `cntkx.ops.scalar`
+`Cx.sequence.stride` enables striding across the sequential axis, selecting every integer items along the sequence.
+`Cx.scalar` converts tensor into scalar of shape `(1,)` 
+
+
+
 ***2019-04-06.***
 #### Added `IndyLSTM` and `IndRNN`
 CNTK implementation of [Independently Recurrent Long Short-term Memory cells: IndyLSTMs](https://arxiv.org/abs/1903.08023)
@@ -111,9 +119,8 @@ Example:
 
 
 ***2019-03-24.***
-#### Added `cntkx.layers.SequentialMaxPooling` and `cntkx.layers.SequentialStride`
+#### Added `cntkx.layers.SequentialMaxPooling`
 Add max pooling layer that works with sequential axis. Current cntk `MaxPooling` doesn't pool across sequence elements.
-`SequentialStride` is added to allow striding across sequence axis.
 
 Example on `cntkx.layers.SequentialMaxPooling`
 

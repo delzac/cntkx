@@ -3,7 +3,6 @@ import cntkx as Cx
 from cntkx.layers import QRNN, SinusoidalPositionalEmbedding, SpatialPyramidPooling, GatedLinearUnit
 from cntkx.layers import BertEmbeddings, PositionalEmbedding
 from cntkx.layers import PreTrainedBertEmbeddings, PositionwiseFeedForward, SequentialMaxPooling
-from cntkx.layers import SequentialStride
 import numpy as np
 
 
@@ -168,60 +167,6 @@ def test_positionwise_feedforward():
     n2 = np.random.random((6, 10)).astype(np.float32)
 
     b.eval({a: [n1, n2]})
-
-
-def test_sequential_stride():
-    # stride = 1, confirm no change in between input and output
-    a = C.sequence.input_variable((3, 10))
-    stride = SequentialStride(input_ndim=2, dim_axis0=3, stride=1, pad=False)
-    b = stride(a)
-
-    n = np.ascontiguousarray(np.arange(3 * 6 * 1 * 10).reshape((1, 6, 3, 10)).astype(np.float32))
-    output = b.eval({a: n})
-
-    assert isinstance(output, list) and len(output) == 1
-    output = output[0]
-
-    np.testing.assert_almost_equal(output, np.squeeze(n))
-
-    # stride = 2
-    a = C.sequence.input_variable((3, 10))
-    stride = SequentialStride(input_ndim=2, dim_axis0=3, stride=2, pad=False)
-    b = stride(a)
-
-    n = np.ascontiguousarray(np.arange(3 * 6 * 1 * 10).reshape((1, 6, 3, 10)).astype(np.float32))
-    output = b.eval({a: n})
-
-    assert isinstance(output, list) and len(output) == 1
-    output = output[0]
-
-    np.testing.assert_almost_equal(output, np.squeeze(n)[::2])
-
-    # stride = 3 with seq of 3d tensor
-    a = C.sequence.input_variable((3, 10, 15))
-    stride = SequentialStride(input_ndim=3, dim_axis0=3, stride=3, pad=False)
-    b = stride(a)
-
-    n = np.ascontiguousarray(np.arange(3 * 6 * 15 * 10).reshape((1, 6, 3, 10, 15)).astype(np.float32))
-    output = b.eval({a: n})
-
-    assert isinstance(output, list) and len(output) == 1
-    output = output[0]
-
-    np.testing.assert_almost_equal(output, np.squeeze(n)[::3])
-
-    # stride = 3 with seq of 1d vector
-    a = C.sequence.input_variable((3,))
-    stride = SequentialStride(input_ndim=1, dim_axis0=3, stride=3, pad=False)
-    b = stride(a)
-
-    n = np.ascontiguousarray(np.arange(3 * 6 * 1 * 1).reshape((1, 6, 3)).astype(np.float32))
-    output = b.eval({a: n})
-
-    assert isinstance(output, list) and len(output) == 1
-    output = output[0]
-
-    np.testing.assert_almost_equal(output, np.squeeze(n)[::3])
 
 
 def test_sequential_max_pooling1():

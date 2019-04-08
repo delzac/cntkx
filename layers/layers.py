@@ -1047,20 +1047,21 @@ def GatedLinearUnit(window: int = 2, hidden_dim: int = None, activation=C.sigmoi
 
     """
     assert hidden_dim % 2 == 0, "hidden dimension must be divisible by 2"
+    linear = SequentialConvolution(filter_shape=(window,), num_filters=2 * hidden_dim, pad=False)
 
+    @C.Function
     def inner(input_tensor):
-        filter_shape = (window,) + input_tensor.shape
 
         input_sequence = input_tensor
         if window > 1:
             # to ensure causal relation is still preserved
             input_sequence = Cx.sequence.pad(input_sequence, (window - 1, 0), constant_value=0)
 
-        conv_values = SequentialConvolution(filter_shape=filter_shape, num_filters=2 * hidden_dim, pad=False,
-                                            reduction_rank=0)(input_sequence) >> C.squeeze
+        conv_values = linear(input_sequence)
 
-        outputs = C.slice(conv_values, 0, 0, hidden_dim) + activation(C.slice(conv_values, 0, hidden_dim, 2 * hidden_dim))
-        return outputs
+        a = C.slice(conv_values, 0, 0, hidden_dim)
+        b = C.slice(conv_values, 0, hidden_dim, 2 * hidden_dim)
+        return a + activation(b)
 
     return inner
 

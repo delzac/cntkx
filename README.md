@@ -44,6 +44,7 @@ cntkx only works with python>=3.6
 | `MultiHeadAttention` | Attention used in BERT and Transformer (aka 'attention is all you need') |
 | `GaussianWindowAttention` | Windowed attention instead of conventional attention where everything is attended at the same time |
 | `SequentialMaxPooling` | Max pool across sequential axis and static axes |
+| `SequentialAveragePooling` | Average pool across sequential axis and static axes |
 
 | Blocks | Description |
 | --- | ---|
@@ -81,6 +82,26 @@ and [DeepBelief_Course4_Examples](https://github.com/AllanYiin/DeepBelief_Course
 
 
 ## News
+***2019-04-08.***
+#### Added `cntkx.layers.SequentialAveragePooling`
+Add average pooling layer that works with sequential axis. Current cntk `AveragePooling` doesn't pool across sequence elements.
+
+Example on `cntkx.layers.SequentialAveragePooling`
+
+    # rgb image of height 25 and variable width
+    a = C.sequence.input_variable((3, 25))
+    
+    # Convolute across image with (3, 3) kernel with stride (1, 1)
+    b = C.layers.SequentialConvolution(filter_shape=(3, 3), num_filters=16, stride=(1, 1), pad=True)(a)
+    
+    assert b.shape == (16, 25)
+    
+    # max pool (2,2) in height and width with stride (2,2) in height and width, no padding
+    c = SequentialAveragePooling(filter_shape=(2, 2), strides=(2, 2), pad=False)(b)
+    
+    assert c.shape == (16, 12)
+
+
 ***2019-04-07.***
 #### Added `cntkx.sequence.stride` and `cntkx.ops.scalar`
 `Cx.sequence.stride` enables striding across the sequential axis, selecting every integer items along the sequence.

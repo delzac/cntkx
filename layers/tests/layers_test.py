@@ -1,7 +1,7 @@
 import cntk as C
 import cntkx as Cx
 from cntkx.layers import QRNN, SinusoidalPositionalEmbedding, SpatialPyramidPooling, GatedLinearUnit
-from cntkx.layers import BertEmbeddings, PositionalEmbedding
+from cntkx.layers import BertEmbeddings, PositionalEmbedding, SequentialAveragePooling
 from cntkx.layers import PreTrainedBertEmbeddings, PositionwiseFeedForward, SequentialMaxPooling
 import numpy as np
 
@@ -169,7 +169,10 @@ def test_positionwise_feedforward():
     b.eval({a: [n1, n2]})
 
 
-def test_sequential_max_pooling1():
+def test_sequential_max_pooling():
+    # ===================================================================
+    # sequential max pool across rgb images with width in sequence axis
+    # ===================================================================
     a = C.sequence.input_variable((2, 4))
     b = SequentialMaxPooling(filter_shape=(2, 2), strides=(2, 2), pad=False)(a)
 
@@ -195,8 +198,9 @@ def test_sequential_max_pooling1():
     assert output.shape[0] == 3 and desired.shape[0] == 2
     assert output.shape[0] != desired.shape[0], "Due to bug, sequence length is different between desired and output"
 
-
-def test_sequential_max_pooling2():
+    # ===================================================================
+    # sequential max pool across rgb images with width in sequence axis
+    # ===================================================================
     a = C.sequence.input_variable((3, 25))
     b = SequentialMaxPooling(filter_shape=(2, 2), strides=(2, 2), pad=False)(a)
 
@@ -219,8 +223,9 @@ def test_sequential_max_pooling2():
 
     np.testing.assert_almost_equal(output, desired)
 
-
-def test_sequential_max_pooling3():
+    # ===================================================================
+    # sequential max pool across rgb images with width in sequence axis
+    # ===================================================================
     a = C.sequence.input_variable((3, 25))
     b = SequentialMaxPooling(filter_shape=(3, 3), strides=(2, 2), pad=False)(a)
 
@@ -243,8 +248,9 @@ def test_sequential_max_pooling3():
     # BUGBUG: once fixed, this assertion should fail
     np.testing.assert_almost_equal(output[:2], desired)
 
-
-def test_sequential_max_pooling4():
+    # ===================================================================
+    # sequential max pool across rgb images with width in sequence axis
+    # ===================================================================
     a = C.sequence.input_variable((3, 25))
     b = SequentialMaxPooling(filter_shape=(3, 3), strides=(2, 2), pad=True)(a)
 
@@ -267,8 +273,9 @@ def test_sequential_max_pooling4():
 
     np.testing.assert_almost_equal(output, desired)
 
-
-def test_sequential_max_pooling5():
+    # ===================================================================
+    # sequential max pool across rgb images with width in sequence axis
+    # ===================================================================
     a = C.sequence.input_variable((3, 25))
     b = SequentialMaxPooling(filter_shape=(4, 4), strides=(2, 2), pad=True)(a)
 
@@ -289,9 +296,9 @@ def test_sequential_max_pooling5():
 
     np.testing.assert_almost_equal(output, desired)
 
-
-def test_sequential_max_pooling6():
-    """ sequential max pool across a sequence of vector """
+    # ===================================================================
+    # sequential max pool across a sequence of vector or B&W images
+    # ===================================================================
     a = C.sequence.input_variable((25, ))
     b = SequentialMaxPooling(filter_shape=(4,), strides=(2,), pad=True)(a)
 
@@ -311,6 +318,160 @@ def test_sequential_max_pooling6():
     desired = np.squeeze(np.moveaxis(desired, -1, 1))
 
     np.testing.assert_almost_equal(output, desired)
+
+
+def test_sequential_average_pooling():
+    # ===================================================================
+    # sequential max pool across rgb images with width in sequence axis
+    # ===================================================================
+    a = C.sequence.input_variable((2, 4))
+    b = SequentialAveragePooling(filter_shape=(2, 2), strides=(2, 2), pad=False)(a)
+
+    n = np.ascontiguousarray(np.arange(2 * 5 * 4).reshape((1, 5, 2, 4)).astype(np.float32))
+    output = b.eval({a: n})
+
+    assert isinstance(output, list) and len(output) == 1
+    output = output[0]
+
+    a = C.input_variable((2, 4, 5))
+    b = C.layers.AveragePooling(filter_shape=(2, 2), strides=(2, 2), pad=False)(a)
+
+    n = np.arange(2 * 5 * 4).reshape((1, 5, 2, 4)).astype(np.float32)
+    n = np.ascontiguousarray(np.moveaxis(n, 1, -1))
+
+    desired = b.eval({a: n})
+    desired = np.squeeze(np.moveaxis(desired, -1, 1))
+
+    np.testing.assert_almost_equal(output[:2, ...], desired)
+
+    # BUGBUG: Sequential AveragePooling will 'right pad' on sequential axis
+    # BUGBUG: once fixed, this assertion should fail
+    assert output.shape[0] == 3 and desired.shape[0] == 2
+    assert output.shape[0] != desired.shape[0], "Due to bug, sequence length is different between desired and output"
+
+    # ===================================================================
+    # sequential max pool across rgb images with width in sequence axis
+    # ===================================================================
+    a = C.sequence.input_variable((3, 25))
+    b = SequentialAveragePooling(filter_shape=(2, 2), strides=(2, 2), pad=False)(a)
+
+    assert b.shape == (3, 12)
+
+    n = np.ascontiguousarray(np.arange(3 * 6 * 25).reshape((1, 6, 3, 25)).astype(np.float32))
+    output = b.eval({a: n})
+
+    assert isinstance(output, list) and len(output) == 1
+    output = output[0]
+
+    a = C.input_variable((3, 25, 6))
+    b = C.layers.AveragePooling(filter_shape=(2, 2), strides=(2, 2), pad=False)(a)
+
+    n = np.arange(3 * 6 * 25).reshape((1, 6, 3, 25)).astype(np.float32)
+    n = np.ascontiguousarray(np.moveaxis(n, 1, -1))
+
+    desired = b.eval({a: n})
+    desired = np.squeeze(np.moveaxis(desired, -1, 1))
+
+    np.testing.assert_almost_equal(output, desired)
+
+    # ===================================================================
+    # sequential max pool across rgb images with width in sequence axis
+    # ===================================================================
+    a = C.sequence.input_variable((3, 25))
+    b = SequentialAveragePooling(filter_shape=(3, 3), strides=(2, 2), pad=False)(a)
+
+    n = np.ascontiguousarray(np.arange(3 * 6 * 25).reshape((1, 6, 3, 25)).astype(np.float32))
+    output = b.eval({a: n})
+
+    assert isinstance(output, list) and len(output) == 1
+    output = output[0]
+
+    a = C.input_variable((3, 25, 6))
+    b = C.layers.AveragePooling(filter_shape=(3, 3), strides=(2, 2), pad=False)(a)
+
+    n = np.arange(3 * 6 * 25).reshape((1, 6, 3, 25)).astype(np.float32)
+    n = np.ascontiguousarray(np.moveaxis(n, 1, -1))
+
+    desired = b.eval({a: n})
+    desired = np.squeeze(np.moveaxis(desired, -1, 1))
+
+    # BUGBUG: Sequential AveragePooling will 'right pad' on sequential axis
+    # BUGBUG: once fixed, this assertion should fail
+    np.testing.assert_almost_equal(output[:2], desired)
+
+    # ===================================================================
+    # sequential max pool across rgb images with width in sequence axis
+    # ===================================================================
+    a = C.sequence.input_variable((3, 25))
+    b = SequentialAveragePooling(filter_shape=(3, 3), strides=(2, 2), pad=True)(a)
+
+    assert b.shape == (3, 13)
+
+    n = np.ascontiguousarray(np.arange(3 * 6 * 25).reshape((1, 6, 3, 25)).astype(np.float32))
+    output = b.eval({a: n})
+
+    assert isinstance(output, list) and len(output) == 1
+    output = output[0]
+
+    a = C.input_variable((3, 25, 6))
+    b = C.layers.AveragePooling(filter_shape=(3, 3), strides=(2, 2), pad=True)(a)
+
+    n = np.arange(3 * 6 * 25).reshape((1, 6, 3, 25)).astype(np.float32)
+    n = np.ascontiguousarray(np.moveaxis(n, 1, -1))
+
+    desired = b.eval({a: n})
+    desired = np.squeeze(np.moveaxis(desired, -1, 1))
+
+    # ignore the first seq item because SequentialAveragePooling included padding in average calculation
+    np.testing.assert_almost_equal(output[1:], desired[1:])
+
+    # ===================================================================
+    # sequential max pool across rgb images with width in sequence axis
+    # ===================================================================
+    a = C.sequence.input_variable((3, 25))
+    b = SequentialAveragePooling(filter_shape=(4, 4), strides=(2, 2), pad=True)(a)
+
+    n = np.ascontiguousarray(np.arange(3 * 6 * 25).reshape((1, 6, 3, 25)).astype(np.float32))
+    output = b.eval({a: n})
+
+    assert isinstance(output, list) and len(output) == 1
+    output = output[0]
+
+    a = C.input_variable((3, 25, 6))
+    b = C.layers.AveragePooling(filter_shape=(4, 4), strides=(2, 2), pad=True)(a)
+
+    n = np.arange(3 * 6 * 25).reshape((1, 6, 3, 25)).astype(np.float32)
+    n = np.ascontiguousarray(np.moveaxis(n, 1, -1))
+
+    desired = b.eval({a: n})
+    desired = np.squeeze(np.moveaxis(desired, -1, 1))
+
+    # ignore the first and last seq item because SequentialAveragePooling included padding in average calculation
+    np.testing.assert_almost_equal(output[1:-1], desired[1:-1])
+
+    # ===================================================================
+    # sequential max pool across a sequence of vector or B&W images
+    # ===================================================================
+    a = C.sequence.input_variable((25, ))
+    b = SequentialAveragePooling(filter_shape=(4,), strides=(2,), pad=True)(a)
+
+    n = np.ascontiguousarray(np.arange(1 * 6 * 25).reshape((1, 6, 25)).astype(np.float32))
+    output = b.eval({a: n})
+
+    assert isinstance(output, list) and len(output) == 1
+    output = output[0]
+
+    a = C.input_variable((25, 6))
+    b = C.layers.AveragePooling(filter_shape=(4, ), strides=(2, ), pad=True)(a)
+
+    n = np.arange(1 * 6 * 25).reshape((1, 6, 25)).astype(np.float32)
+    n = np.ascontiguousarray(np.moveaxis(n, 1, -1))
+
+    desired = b.eval({a: n})
+    desired = np.squeeze(np.moveaxis(desired, -1, 1))
+
+    # ignore the first and last seq item because SequentialAveragePooling included padding in average calculation
+    np.testing.assert_almost_equal(output[1:-1], desired[1:-1])
 
 
 def test_convolution_2d():

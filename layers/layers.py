@@ -3,10 +3,10 @@ import numpy as np
 import cntk as C
 import cntkx as Cx
 from cntkx.layers.blocks import _INFERRED
-from cntk.default_options import default_override_or
-from cntk.layers.blocks import identity, _initializer_for, _inject_name
-from cntk.layers import Recurrence, Embedding, Dropout
-from cntk.layers import MaxPooling, LayerNormalization
+from cntk.default_options import default_override_or, get_default_override
+from cntk.layers.blocks import identity, _initializer_for
+from cntk.layers import Embedding, Dropout
+from cntk.layers import MaxPooling, LayerNormalization, AveragePooling
 from cntk.internal import _as_tuple
 from cntk.variables import Record
 
@@ -171,7 +171,8 @@ def Dense(shape, activation=default_override_or(identity), init=default_override
     return dense
 
 
-def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=False, name=''):
+def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=False,
+         variational_dropout_rate_input=None, variational_dropout_rate_output=None, name=''):
     """
     Quasi-Recurrent Neural Networks layer
 
@@ -247,7 +248,10 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
         o = C.sigmoid(output)
 
         # Pooling
-        c = Recurrence(f_pool)(C.splice(z, f))  # f pool
+        zf = C.splice(z, f)
+        c = Cx.layers.Recurrence(f_pool,
+                                 variational_dropout_rate_input=variational_dropout_rate_input,
+                                 variational_dropout_rate_output=variational_dropout_rate_output)(zf)
         h = o * c  # o pool
 
         if return_full_state:
@@ -316,7 +320,7 @@ def SinusoidalPositionalEmbedding(min_timescale=1.0, max_timescale=1.0e4, name: 
         inv_timescales = C.constant(min_timescale * np.exp(np.arange(num_timescales) * -log_timescale_increment),
                                     dtype=np.float32)
 
-        pos = Recurrence(position)(C.slice(x, 0, 0, num_timescales))
+        pos = Cx.layers.Recurrence(position)(C.slice(x, 0, 0, num_timescales))
         scaled_time = pos * inv_timescales
         s = C.sin(scaled_time)
         c = C.cos(scaled_time)
@@ -845,6 +849,7 @@ def SequentialMaxPooling(filter_shape,  # shape of receptive field, e.g. (3,3). 
 
     """
     assert isinstance(filter_shape, tuple), "filter must be a tuple"
+    pad = get_default_override(SequentialConvolution, pad=pad)
 
     if not isinstance(pad, tuple):
         pad = tuple(pad for __ in filter_shape)
@@ -859,8 +864,11 @@ def SequentialMaxPooling(filter_shape,  # shape of receptive field, e.g. (3,3). 
 
     # static_pool over (channel_static_axis, height_static_axis)
     if pool_filter_shape and pool_strides and pool_pad:
+
         static_pooler = MaxPooling(filter_shape=filter_shape[1:], strides=pool_strides, pad=pool_pad, name='static_pooler')
+
     else:
+
         static_pooler = identity  # when there is no static axes to pool
 
     @C.BlockFunction('SequentialMaxPooling', name)
@@ -894,6 +902,119 @@ def SequentialMaxPooling(filter_shape,  # shape of receptive field, e.g. (3,3). 
 
         pooled = static_pooler(sequential_max_pooled)
         # sequential_max_pooled: [#, **] [channel, pooled_static_axes...]
+
+        return pooled
+
+    return inner
+
+
+def SequentialAveragePooling(filter_shape,  # shape of receptive field, e.g. (3,3) filter_shape[0] is for sequence axis
+                             strides=1,  # strides[0] is for sequence axis.
+                             pad=default_override_or(True),  # pad[0] is for sequence axis.
+                             name=''):
+    """ Layer factory function to create a average-pooling layer that works with sequences
+
+    Sequential average pooling has a slight bug in that even when Pad=False, sequence axis will still be
+    padded and asymmetrically padded so on the right. i.e. there may be an extrac sequence element. But it should
+    not be an issue since error in border pixels typically wouldn't affect results.
+
+    Note that this implementation includes padding as part of the average, different from the standard average pooling
+    in tensorflow, cntk and pytorch.
+
+    For a corner average pool with kernel of (5, 5):
+
+        0 0 0  0  0
+        0 0 0  0  0
+        0 0 1  2  3
+        0 0 6  7  8
+        0 0 11 12 13
+
+        Sum = (1+2+3+6+7+8+11+12+13) = 63
+        SequentialAveragePooling: 63/25 = 2.52
+        AveragePooling (cntk, tf, pytorch)  : 63/9  = 7
+
+    Example:
+        # rgb image of height 25 and variable width
+        a = C.sequence.input_variable((3, 25))
+
+        # max pool (2,2) in height and width with stride (2,2) in height and width, no padding
+        b = SequentialAveragePooling(filter_shape=(2, 2), strides=(2, 2), pad=False)(a)
+        assert b.shape == (3, 12)
+
+        # max pool (2,2) in height and width with stride (2,2) in height and width, with padding
+        b = SequentialAveragePooling(filter_shape=(2, 2), strides=(2, 2), pad=True)(a)
+        assert b.shape == (3, 13)
+
+
+    Arguments:
+        filter_shape (`int` or `tuple` of `ints`): shape (spatial extent) of the receptive field, *not* including the input feature-map depth. E.g. (3,3) for a 2D convolution.
+        strides (`int` or `tuple` of `ints`, defaults to 1): stride (increment when sliding over the input). Use a `tuple` to specify a per-axis value.
+        pad (`bool` or `tuple` of `bools`, defaults to `False`): if `False`, then the pooling operation will be shifted over the "valid"
+          area of input, that is, no value outside the area is used. If ``pad=True`` on the other hand,
+          pooling will be applied to all input positions, and positions outside the valid region will be considered containing zero.
+          Use a `tuple` to specify a per-axis value.
+        name (str, defaults to ''): the name of the function instance in the network
+
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the average-pooling operation to it
+
+    """
+    assert isinstance(filter_shape, tuple), "filter must be a tuple"
+    pad = get_default_override(SequentialConvolution, pad=pad)
+
+    if not isinstance(pad, tuple):
+        pad = tuple(pad for __ in filter_shape)
+
+    if not isinstance(strides, tuple):
+        strides = tuple(strides for __ in filter_shape)
+
+    # for pooling in static axes
+    pool_filter_shape = filter_shape[1:]
+    pool_pad = pad[1:]
+    pool_strides = strides[1:]
+
+    # static_pool over (channel_static_axis, height_static_axis)
+    if pool_filter_shape and pool_strides and pool_pad:
+
+        static_pooler = AveragePooling(filter_shape=filter_shape[1:], strides=pool_strides, pad=pool_pad, name='static_pooler')
+
+    else:
+
+        static_pooler = identity  # when there is no static axes to pool
+
+    @C.BlockFunction('SequentialAveragePooling', name)
+    def inner(x):
+        if pad[0]:  # sequential axis
+            # when kernel is even, padding will be asymmetric in left and right
+            right_pad = int((filter_shape[0] - 1) / 2) if filter_shape[0] % 2 else int(filter_shape[0] / 2)
+            left_pad = right_pad if filter_shape[0] % 2 else right_pad - 1
+
+            past = [C.sequence.past_value(x, time_step=i + 1) for i in range(left_pad)]
+            future = [C.sequence.future_value(x, time_step=i + 1) for i in range(right_pad)]
+
+            past_now_future = past + [x] + future
+
+        else:
+
+            future = [C.sequence.future_value(x, time_step=i + 1) for i in range(filter_shape[1] - 1)]
+            past_now_future = [x] + future
+
+        windows = C.splice(*past_now_future, axis=C.Axis.new_leading_axis())
+        # windows: [#, *] [concat, channel, static_axes...]
+
+        selected_windows = Cx.sequence.stride(windows, strides[0])
+        # selected_windows: [#, **] [concat, channel, static_axes...]
+        # assert windows.shape == selected_windows.shape
+
+        # Pooling between sequential elements done by reduce_mean on windows
+        # BUGBUG: do not set keepdims=False in reduce_max, will raise error
+        sequential_ave_pooled = C.squeeze(C.reduce_mean(selected_windows, axis=0), axes=0)
+        # sequential_ave_pooled: [#, **] [channel, static_axes...]
+
+        pooled = static_pooler(sequential_ave_pooled)
+        # pooled: [#, **] [channel, pooled_static_axes...]
 
         return pooled
 

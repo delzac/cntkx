@@ -1021,7 +1021,7 @@ def SequentialAveragePooling(filter_shape,  # shape of receptive field, e.g. (3,
     return inner
 
 
-def GatedLinearUnit(window: int = 2, hidden_dim: int = None, activation=C.sigmoid):
+def GatedLinearUnit(window: int = 2, hidden_dim: int = None, activation=C.sigmoid, name=''):
     """
     Gated Linear Unit or gated convolutional neural network is a finite context approach
     through stacked convolutions, which can be  more  efficient  since  they  allow
@@ -1049,7 +1049,7 @@ def GatedLinearUnit(window: int = 2, hidden_dim: int = None, activation=C.sigmoi
     assert hidden_dim % 2 == 0, "hidden dimension must be divisible by 2"
     linear = SequentialConvolution(filter_shape=(window,), num_filters=2 * hidden_dim, pad=False)
 
-    @C.Function
+    @C.BlockFunction(GatedLinearUnit, name)
     def inner(input_tensor):
 
         input_sequence = input_tensor

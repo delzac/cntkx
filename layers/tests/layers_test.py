@@ -28,22 +28,29 @@ def test_qrnn1():
 
 
 def test_sinusoidal_positional_embedding():
-    a = C.sequence.input_variable(10)
-    b = SinusoidalPositionalEmbedding()(a)
+    seq = 50
+    dim = 100
+    a = C.sequence.input_variable(dim)
+    b = SinusoidalPositionalEmbedding(dim)(a)
 
-    assert b.shape == (10, )
+    assert b.shape == (dim, )
 
-    n = np.random.random((1, 5, 10)).astype(np.float32)
+    n = np.random.random((1, seq, dim)).astype(np.float32)
     r = b.eval({a: n})
 
-    a = C.sequence.input_variable(9)
-    b = SinusoidalPositionalEmbedding()(a)
+    dim = 99
+    a = C.sequence.input_variable(dim)
+    b = SinusoidalPositionalEmbedding(dim)(a)
 
-    assert b.shape == (9, )
+    assert b.shape == (dim, )
 
-    n = np.random.random((1, 5, 9)).astype(np.float32)
+    n = np.random.random((1, seq, dim)).astype(np.float32)
     r = b.eval({a: n})
 
+    assert np.sum(r[0][:, -1]) == 0, "last dimension should be all zeros if dimension is odd"
+
+    # plt.imshow(r[0])  # to view image to confirm correctness
+    # plt.show()
 
 def test_spatial_pyramid_pooling():
     # test 1

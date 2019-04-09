@@ -262,7 +262,8 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
     return model
 
 
-def SinusoidalPositionalEmbedding(min_timescale=1.0, max_timescale=1.0e4, name: str = ''):
+# TODO: include dimension in arguments as that inner can be made into block function
+def SinusoidalPositionalEmbedding(dim, min_timescale=1.0, max_timescale=1.0e4, name=''):
     """ Gets a bunch of sinusoids of different frequencies and add it to the input sequence
 
     Each channel of the input Tensor is incremented by a sinusoid of a different
@@ -299,6 +300,7 @@ def SinusoidalPositionalEmbedding(min_timescale=1.0, max_timescale=1.0e4, name: 
         assert b.shape == (10, )
 
     Arguments:
+        dim (int): dimension of embedding (typically must be the same as the incoming tensor to be embedded)
         min_timescale (float): geometric sequence of timescales starting with min_timescale
         max_timescale (float): geometric sequence of timescales ending with max_timescale
         name (str): a name for this layer.
@@ -308,20 +310,16 @@ def SinusoidalPositionalEmbedding(min_timescale=1.0, max_timescale=1.0e4, name: 
 
     """
 
-    @C.Function
-    def position(p, x):
-        return p + x * 0 + 1
-
+    @C.BlockFunction('SinusoidalPositionalEmbedding', name)
     def embedding(x):
-        assert x.shape[0] > 0, f"input tensor must have a defined shape, input shape is {x.shape}"
-        dim = x.shape[0]
         num_timescales = dim // 2
         log_timescale_increment = (math.log(float(max_timescale) / float(min_timescale)) / (num_timescales - 1))
         inv_timescales = C.constant(min_timescale * np.exp(np.arange(num_timescales) * -log_timescale_increment),
                                     dtype=np.float32)
 
-        pos = Cx.layers.Recurrence(position)(C.slice(x, 0, 0, num_timescales))
-        scaled_time = pos * inv_timescales
+        pos = Cx.sequence.position(x)  # pos: [#, *] [1, ]
+        scaled_time = pos * inv_timescales  # scaled_time: [#, *] [num_timescales,]
+
         s = C.sin(scaled_time)
         c = C.cos(scaled_time)
         signal = C.splice(s, c)
@@ -330,7 +328,7 @@ def SinusoidalPositionalEmbedding(min_timescale=1.0, max_timescale=1.0e4, name: 
         if dim % 2 != 0:
             signal = C.pad(signal, [[0, 1]])
 
-        return C.layers.Label(name=name)(signal)
+        return signal
 
     return embedding
 
@@ -416,11 +414,18 @@ def SequentialConvolution(filter_shape,     # shape of receptive field, e.g. (3,
         raise NotImplementedError("Convolution: transpose_weight option currently not supported")
     if not sharing:
         raise NotImplementedError("Convolution: sharing option currently must be True")
-    if (groups <= 0):
+    if groups <= 0:
         raise ValueError("Convolution: groups must be strictly positive, i.e. groups > 0.")
+    if input_num_filters and input_num_filters % groups != 0:
+        raise ValueError('input_num_filters must be divisible by number of groups')
+    if groups > 1 and num_filters[0] % groups != 0:
+        raise ValueError('num_filters must be divisible by number of groups')
+    if groups > 1 and reduction_rank == 0:
+        raise ValueError('reduction_rank cannot be zero in group convolution i.e. there must be incoming channels')
 
+    num_filters_per_group = None
     if input_num_filters and num_filters[0] % groups == 0 and input_num_filters % groups == 0:
-        input_num_filters = input_num_filters / groups
+        num_filters_per_group = (int(input_num_filters / groups), )
         # TODO: work on groups, understand how reduction==0 and init=np might affect group which doesn't have inferred
 
     # The convolution() function currently requires exactly one input and one output depth axis.
@@ -429,7 +434,7 @@ def SequentialConvolution(filter_shape,     # shape of receptive field, e.g. (3,
     emulating_input_depth  = reduction_rank == 0
 
     actual_output_channels_shape = num_filters if not emulating_output_depth else (1,)
-    actual_reduction_shape       = _INFERRED
+    actual_reduction_shape       = _INFERRED if num_filters_per_group is None else num_filters_per_group
     actual_filter_shape          = filter_shape
 
     # add the dimension to the options as well
@@ -454,6 +459,16 @@ def SequentialConvolution(filter_shape,     # shape of receptive field, e.g. (3,
         # typically, with inferred axis, pad omits channel pad, which is taken to be False. (seq, static axes)
         # with emulate axis, the extra pad would have been supplied already
         pad = (False, ) * reduction_rank + pad  # assume pad[0] is seq axis, pad[1:] is static axes
+
+    elif num_filters_per_group:
+
+        # with no inferred axis in W and no emulated axis,
+        # padding must be explicit for all axes (channel, seq, static axes)
+        # typically, with inferred axis, pad omits channel pad, which is taken to be False. (seq, static axes)
+        # with emulate axis, the extra pad would have been supplied already
+        pad = (False,) * reduction_rank + pad  # assume pad[0] is seq axis, pad[1:] is static axes
+        init_kernel = _initializer_for(init, Record(filter_rank=filter_rank, output_rank=-len(actual_output_channels_shape)))
+
     else:
         init_kernel = _initializer_for(init, Record(filter_rank=filter_rank, output_rank=-len(actual_output_channels_shape)))
 
@@ -463,7 +478,7 @@ def SequentialConvolution(filter_shape,     # shape of receptive field, e.g. (3,
     bias_filter_rank = len(actual_filter_shape) - 1
     W = C.Parameter(actual_output_channels_shape + kernel_shape,            init=init_kernel, name='W')                   # (K, C, W, H) aka [ H x W x C x K ]
     b = C.Parameter(actual_output_channels_shape + (1,) * bias_filter_rank, init=init_bias,   name='b') if bias else None # (K,    1, 1) aka [ 1 x 1 x     K ]
-
+    print(W.shape)
     # expression
     @C.BlockFunction('SequentialConvolution', name)
     def convolve(x):
@@ -502,20 +517,21 @@ def SequentialConvolution(filter_shape,     # shape of receptive field, e.g. (3,
     return convolve
 
 
-def Convolution(filter_shape,     # shape of receptive field, e.g. (3,3)
-                num_filters=None, # e.g. 64 or None (which means 1 channel and don't add a dimension)
-                sequential=False, # time convolution if True (filter_shape[0] corresponds to dynamic axis)
+def Convolution(filter_shape,      # shape of receptive field, e.g. (3,3)
+                num_filters=None,  # e.g. 64 or None (which means 1 channel and don't add a dimension)
+                sequential=False,  # time convolution if True (filter_shape[0] corresponds to dynamic axis)
                 activation=default_override_or(identity),
                 init=default_override_or(C.glorot_uniform()),
                 pad=default_override_or(False),
                 strides=1,
-                sharing=True,     # (must be True currently)
+                sharing=True,      # (must be True currently)
                 bias=default_override_or(True),
                 init_bias=default_override_or(0),
-                reduction_rank=1, # (0 means input has no depth dimension, e.g. audio signal or B&W image)  --TODO: call it item_rank?
+                reduction_rank=1,  # (0 means input has no depth dimension, e.g. audio signal or B&W image)  --TODO: call it item_rank?
                 transpose_weight=False,  # (must be False currently)
                 dilation=1,
                 groups=1,
+                input_num_filters=None,
                 max_temp_mem_size_in_samples=0,
                 op_name='Convolution',
                 name=''):
@@ -580,8 +596,19 @@ def Convolution(filter_shape,     # shape of receptive field, e.g. (3,3)
         raise NotImplementedError("Convolution: sharing option currently must be True")
     if groups <= 0:
         raise ValueError("Convolution: groups must be strictly positive, i.e. groups > 0.")
+    if input_num_filters and input_num_filters % groups != 0:
+        raise ValueError('input_num_filters must be divisible by number of groups')
+    if groups > 1 and num_filters[0] % groups != 0:
+        raise ValueError('num_filters must be divisible by number of groups')
+    if groups > 1 and reduction_rank == 0:
+        raise ValueError('reduction_rank cannot be zero in group convolution i.e. there must be incoming channels')
     if sequential:
         raise ValueError("Use cntk.layers.SequentialConvolution instead")
+
+    num_filters_per_group = None
+    if input_num_filters and num_filters[0] % groups == 0 and input_num_filters % groups == 0:
+        num_filters_per_group = (int(input_num_filters / groups),)
+        # TODO: work on groups, understand how reduction==0 and init=np might affect group which doesn't have inferred
 
     # The convolution() function currently requires exactly one input and one output depth axis.
     # So we emulate those dimensions on this level
@@ -589,7 +616,7 @@ def Convolution(filter_shape,     # shape of receptive field, e.g. (3,3)
     emulating_input_depth = reduction_rank == 0
 
     actual_output_channels_shape = num_filters if not emulating_output_depth else (1,)
-    actual_reduction_shape = _INFERRED
+    actual_reduction_shape = _INFERRED if num_filters_per_group is None else num_filters_per_group
     actual_filter_shape = filter_shape
 
     # add the dimension to the options as well
@@ -614,6 +641,16 @@ def Convolution(filter_shape,     # shape of receptive field, e.g. (3,3)
         # typically, with inferred axis, pad omits channel pad, which is taken to be False. (static axes)
         # with emulate axis, the extra pad would have been supplied already
         pad = (False,) * reduction_rank + pad
+
+    elif num_filters_per_group:
+
+        # with no inferred axis in W and no emulated axis,
+        # padding must be explicit for all axes (channel, seq, static axes)
+        # typically, with inferred axis, pad omits channel pad, which is taken to be False. (seq, static axes)
+        # with emulate axis, the extra pad would have been supplied already
+        pad = (False,) * reduction_rank + pad  # assume pad[0] is seq axis, pad[1:] is static axes
+        init_kernel = _initializer_for(init, Record(filter_rank=filter_rank, output_rank=-len(actual_output_channels_shape)))
+
     else:
         init_kernel = _initializer_for(init, Record(filter_rank=filter_rank, output_rank=-len(actual_output_channels_shape)))
 
@@ -668,6 +705,7 @@ def Convolution2D(filter_shape,     # shape of receptive field, e.g. (3,3). Must
                   reduction_rank=1, # (0 means input has no depth dimension, e.g. audio signal or B&W image)
                   dilation=1,
                   groups=1,
+                  input_num_filters=None,
                   name=''):
     '''
     Convolution2D(filter_shape, num_filters=None, activation=identity, init=glorot_uniform(), pad=False, strides=1, bias=True, init_bias=0, reduction_rank=1, name='')
@@ -710,10 +748,12 @@ def Convolution2D(filter_shape,     # shape of receptive field, e.g. (3,3). Must
     init_bias  = C.get_default_override(Convolution2D, init_bias=init_bias)
     if len(_as_tuple(filter_shape)) > 2:
          raise ValueError('Convolution2D: filter_shape must be a scalar or a 2D tuple, e.g. 3 or (3,3)')
-    filter_shape = _pad_to_shape((0,0), filter_shape, 'filter_shape')
+    filter_shape = _pad_to_shape((0, 0), filter_shape, 'filter_shape')
+
     return Convolution(filter_shape, num_filters=num_filters, activation=activation, init=init, pad=pad, sequential=False,
                        strides=strides, sharing=True, bias=bias, init_bias=init_bias, reduction_rank=reduction_rank,
-                       dilation=dilation, groups=groups, op_name='Convolution2D', name=name)
+                       dilation=dilation, groups=groups, input_num_filters=input_num_filters, op_name='Convolution2D',
+                       name=name)
 
 
 def Conv2DMaxPool(n, conv_filter_shape,  # shape of receptive field, e.g. (3,3). Must be a 2-element tuple.

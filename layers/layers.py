@@ -262,7 +262,6 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
     return model
 
 
-# TODO: include dimension in arguments as that inner can be made into block function
 def SinusoidalPositionalEmbedding(dim, min_timescale=1.0, max_timescale=1.0e4, name=''):
     """ Gets a bunch of sinusoids of different frequencies and add it to the input sequence
 
@@ -295,7 +294,7 @@ def SinusoidalPositionalEmbedding(dim, min_timescale=1.0, max_timescale=1.0e4, n
         import cntkx as Cx
 
         a = C.sequence.input_variable(10)
-        b = Cx.layers.SinusoidalPositionalEmbedding()(a)
+        b = Cx.layers.SinusoidalPositionalEmbedding(10)(a)
 
         assert b.shape == (10, )
 

@@ -1,8 +1,6 @@
 import cntk as C
 import cntkx as Cx
-from cntk.layers import Recurrence
 from math import pi
-import numpy as np
 
 
 @C.typemap
@@ -74,7 +72,7 @@ def position(x, name=''):
     return inner(x)  # {#, *] [1,]
 
 
-def stride(x, s: int, tol: float = 0.1):
+def stride(x, s: int, tol: float = 0.2):
     """ Strides across sequential axis
 
     Note:
@@ -95,3 +93,40 @@ def stride(x, s: int, tol: float = 0.1):
     valid = C.less_equal(C.abs(C.sin(integers * pi)), tol)  # sin of integer multiple of pi will return close to zero
     result = C.sequence.gather(x, valid)
     return result
+
+
+def join(a, b):
+    """ joins two sequences along their dynamic sequence axis. Static axis between a and b
+    must be the same and the dimensions of the static axes will remain unchanged in the op.
+
+    Example:
+        import cntk as C
+        import cntkx as Cx
+
+        a = C.sequence.input_variable(3)
+        b = C.sequence.input_variable(3)
+
+        ab = Cx.sequence.join(a, b)
+
+        assert ab.shape == a.shape == b.shape == (3, )
+
+    Arguments:
+        a: Sequence tensor
+        b: Sequence tensor
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+        A new sequence tensor with sequence axis that is the concatenation of the seq axis of a and b
+
+    """
+    a_unpacked, a_mask = C.sequence.unpack(a, padding_value=0).outputs
+    b_unpacked, b_mask = C.sequence.unpack(b, padding_value=0).outputs
+
+    ab_unpacked = C.splice(a_unpacked, b_unpacked, axis=0)
+    ab_mask = C.expand_dims(C.splice(a_mask, b_mask), axis=-1)
+
+    ab_w_pad = C.to_sequence(ab_unpacked)
+    ab_condition = C.to_sequence(ab_mask)
+
+    ab = C.sequence.gather(ab_w_pad, ab_condition)
+    return ab

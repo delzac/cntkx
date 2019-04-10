@@ -1,5 +1,5 @@
 import cntk as C
-from cntkx.ops.sequence import length, pad, stride, position
+from cntkx.ops.sequence import length, pad, stride, position, join
 import numpy as np
 
 
@@ -106,3 +106,24 @@ def test_stride():
 
     for actual, desired in zip(output, n):
         np.testing.assert_equal(actual, desired[::s])
+
+
+def test_join():
+    a = C.sequence.input_variable(3)
+    b = C.sequence.input_variable(3)
+
+    ab = join(a, b)
+
+    n = [np.random.random((2, 3)).astype(np.float32),
+         np.random.random((4, 3)).astype(np.float32),
+         np.random.random((6, 3)).astype(np.float32), ]
+
+    m = [np.random.random((2, 3)).astype(np.float32),
+         np.random.random((4, 3)).astype(np.float32),
+         np.random.random((6, 3)).astype(np.float32), ]
+
+    joined = ab.eval({a: n, b: m})
+    nm = [np.concatenate((nn, mm), axis=0) for nn, mm in zip(n, m)]
+
+    for result, desired in zip(joined, nm):
+        np.testing.assert_equal(result, desired)

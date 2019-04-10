@@ -52,6 +52,7 @@ def test_sinusoidal_positional_embedding():
     # plt.imshow(r[0])  # to view image to confirm correctness
     # plt.show()
 
+
 def test_spatial_pyramid_pooling():
     # test 1
     n = np.random.random((3, 3, 32, 32)).astype(np.float32)

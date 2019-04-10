@@ -26,6 +26,7 @@ cntkx only works with python>=3.6
 | `sequence.length` | length of sequence |
 | `sequence.position` | position of every sequence element |
 | `sequence.stride` | strides across sequential axis  |
+| `sequence.join` | joins two sequence along their sequential axis  |
 | `random.sample` | Samples a given probability distribution |
 | `batchmatmul` | Batch Matrix Multiplication on a static batch axis, similar to tf.matmul |
 
@@ -82,6 +83,11 @@ and [DeepBelief_Course4_Examples](https://github.com/AllanYiin/DeepBelief_Course
 
 
 ## News
+***2019-04-08.***
+#### Added `cntkx.ops.sequence.join`
+Added a new `op` called `join` where two sequence tensors can be joined along with sequence axis forming a longer sequence.
+
+
 ***2019-04-08.***
 #### Added `cntkx.layers.SequentialAveragePooling`
 Add average pooling layer that works with sequential axis. Current cntk `AveragePooling` doesn't pool across sequence elements.

@@ -767,13 +767,14 @@ def Conv2DMaxPool(n, conv_filter_shape,  # shape of receptive field, e.g. (3,3).
                   reduction_rank=1,  # (0 means input has no depth dimension, e.g. audio signal or B&W image)
                   dilation=1,
                   groups=1,
+                  input_num_filters=None,
                   pool_strides=1,
                   pool_pad=default_override_or(False),
                   name_prefix=''):
     """ Stack of Convolution 2D followed by one max pooling layer. Convenience wrapper. """
 
     conv_stack = Convolution2DStack(n, conv_filter_shape, conv_num_filters, activation, init, conv_pad, conv_strides,
-                                    bias, init_bias, reduction_rank, dilation, groups, name_prefix)
+                                    bias, init_bias, reduction_rank, dilation, groups, input_num_filters, name_prefix)
 
     maxpool = MaxPooling(pool_filter_shape, pool_strides, pool_pad, name_prefix + '_pool')
 
@@ -797,11 +798,12 @@ def Convolution2DStack(num_conv_layers,  # num of convolutional layers in the st
                        reduction_rank=1,  # (0 means input has no depth dimension, e.g. audio signal or B&W image)
                        dilation=1,
                        groups=1,
+                       input_num_filters=None,
                        name_prefix=''):
     """ A stack of of convolutional layers. Convenience wrapper. """
 
     convs = [Convolution2D(filter_shape, num_filters, activation, init, pad, strides, bias,
-                           init_bias, reduction_rank, dilation, groups,
+                           init_bias, reduction_rank, dilation, groups, input_num_filters,
                            name_prefix + f'_conv_{i}') for i in range(num_conv_layers)]
 
     def inner(x):

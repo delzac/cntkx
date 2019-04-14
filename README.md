@@ -92,8 +92,9 @@ Added `Label Smoothing Regularization` in `cross_entropy_with_softmax`.
 Added `sequence.window` that creates non-overlapping window along the sequence axis thereby reducing the 
 sequence length and increasing the dimension by the same factor.
 
-Implemented a convenience layer for acoustic modelling known as `PyramidalBiRecurrence`. Used to create
+Implemented a convenience layer used in acoustic modelling known as `PyramidalBiRecurrence`. Used to create
 pyramidal bi-directional LSTM (BLSTM) found in "Listen, attend and spell" by Chan et al. (https://arxiv.org/abs/1508.01211)
+Typically used to down sample the sequence length to make memory and runtime manageable.
 
 
 ***2019-04-08.***

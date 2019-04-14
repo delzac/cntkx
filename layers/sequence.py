@@ -169,7 +169,52 @@ def Recurrence(step_function, go_backwards=default_override_or(False), initial_s
 def PyramidalBiRecurrence(step_fxn_f, step_fxn_b, width, initial_state_f=0, initial_state_b=0,
                            variational_dropout_rate_input=None, variational_dropout_rate_output=None,
                            seed=SentinelValueForAutoSelectRandomSeed, name=''):
+    """ Pyramidal bidirectional recurrence
 
+    Implements a bi-directional recurrence of the step functions given with a pyramidal structure.
+
+    PyramidalBiRecurrence reduces the sequence length and simultaneously increase dimension by width factor.
+    Its typically used in acoustic model to keep runtime manageable.
+
+    For mode details, please refer to "Listen, attend and spell" by Chan et al. (https://arxiv.org/abs/1508.01211)
+
+          concatenated
+          [f1,b8, f2, b7]
+           /    \
+          /      \
+    <--- b8 <--- b7 <--- b6 <--- b5 <--- b4 <--- b3 <--- b2 <--- b1
+    ---> f1 ---> f2 ---> f3 ---> f4 ---> f5 ---> f6 ---> f7 ---> f8
+
+    Example:
+        import cntk as C
+        import cntkx as Cx
+
+        a = C.sequence.input_variable(10)
+        b = Cx.layers.PyramidalBiRecurrence(LSTM(30), LSTM(30), width=2)(a)
+
+        assert b.shape == (30 * 2 * 2, )  # with sequence length also reduced by width factor
+
+    Arguments:
+        step_fxn_f: step function in the forward direction
+        step_fxn_b: step function in the backward direction
+        width (int): width of window in pyramidal structure
+        initial_state_f (scalar or tensor without batch dimension; or a tuple thereof):
+            the initial value for the state. This can be a constant or a learnable parameter.
+            In the latter case, if the step function has more than 1 state variable,
+            this parameter must be a tuple providing one initial state for every state variable.
+        initial_state_b (scalar or tensor without batch dimension; or a tuple thereof):
+            the initial value for the state. This can be a constant or a learnable parameter.
+            In the latter case, if the step function has more than 1 state variable,
+            this parameter must be a tuple providing one initial state for every state variable.
+        variational_dropout_rate_input (float): dropout for input
+        variational_dropout_rate_output (float): dropout for output
+        seed (int): seed for randomisation
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
     forward = Recurrence(step_fxn_f, initial_state=initial_state_f, go_backwards=False,
                          return_full_state=False, variational_dropout_rate_input=variational_dropout_rate_input,
                          variational_dropout_rate_output=variational_dropout_rate_output, seed=seed, name='Pyramidal_Forward')
@@ -178,7 +223,7 @@ def PyramidalBiRecurrence(step_fxn_f, step_fxn_b, width, initial_state_f=0, init
                           return_full_state=False, variational_dropout_rate_input=variational_dropout_rate_input,
                           variational_dropout_rate_output=variational_dropout_rate_output, seed=seed, name='Pyramidal_Backward')
 
-    @C.BlockFunction('PyramidalBiRecurrence', name)
+    @C.Function
     def inner(x):
         y = C.splice(forward(x), backward(x), axis=-1)
         z = Cx.sequence.window(y, width)

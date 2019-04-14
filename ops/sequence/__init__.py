@@ -1,4 +1,5 @@
 import cntk as C
+from cntk.internal import sanitize_input
 import cntkx as Cx
 from math import pi
 
@@ -64,7 +65,7 @@ def position(x, name=''):
         a sequence tensor of shape (1,) with value of 0 to `seq_length` depending on position
     """
 
-    @C.BlockFunction('position', name)
+    @C.BlockFunction('sequence_position', name)
     def inner(a):
         # reconcile_dynamic_axes is necessary to avoid subtle bugs e.g. sequence.where and one_hot
         return C.reconcile_dynamic_axes(C.sequence.where(C.ones_like(Cx.scalar(a))), a)
@@ -72,7 +73,7 @@ def position(x, name=''):
     return inner(x)  # {#, *] [1,]
 
 
-def stride(x, s: int, tol: float = 0.2):
+def stride(x, s, tol=0.2, name=''):
     """ Strides across sequential axis
 
     Note:
@@ -88,11 +89,15 @@ def stride(x, s: int, tol: float = 0.2):
         Every `s` sequence item of `x` starting from the first sequence item
 
     """
-    p = position(x)
-    integers = p / s  # every s sequence item will be an integer
-    valid = C.less_equal(C.abs(C.sin(integers * pi)), tol)  # sin of integer multiple of pi will return close to zero
-    result = C.sequence.gather(x, valid)
-    return result
+    @C.BlockFunction('sequence_stride', name)
+    def inner(a):
+        p = position(a)
+        integers = p / s  # every s sequence item will be an integer
+        valid = C.less_equal(C.abs(C.sin(integers * pi)), tol)  # sin of integer multiple of pi will return close to zero
+        result = C.sequence.gather(a, valid)
+        return result
+
+    return inner(x)
 
 
 def join(a, b):
@@ -132,7 +137,7 @@ def join(a, b):
     return ab
 
 
-def window(x, width, new_axis=False):
+def window(x, width, new_axis=False, name=''):
     """ Creates a non-overlapping window in sequence tensor
 
     It effectively reduces the sequence length by k factor while increasing tensor dimension by k factor.
@@ -155,7 +160,12 @@ def window(x, width, new_axis=False):
         A new sequence tensor with sequence length by k factor with tensor dimension increased by k factor
 
     """
-    w = [x] + [C.sequence.future_value(x, time_step=1 + i) for i in range(width - 1)]
-    w = C.splice(*w, axis=C.Axis.new_leading_axis() if new_axis else -1)
-    y = stride(w, width)
-    return y
+
+    @C.BlockFunction('window', name)
+    def inner(a):
+        w = [a] + [C.sequence.future_value(a, time_step=1 + i) for i in range(width - 1)]
+        w = C.splice(*w, axis=C.Axis.new_leading_axis() if new_axis else -1)
+        y = stride(w, width)
+        return y
+
+    return inner(x)

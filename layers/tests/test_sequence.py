@@ -1,6 +1,7 @@
 import cntk as C
 import numpy as np
-from cntkx.layers.sequence import Recurrence, VariationalDropout
+from cntkx.layers.sequence import Recurrence, VariationalDropout, PyramidalBiRecurrence
+from cntk.layers import LSTM
 
 
 def test_recurrence():
@@ -80,6 +81,22 @@ def test_recurrence():
 
     matched = np.sum(np.equal(result, desired))
     assert matched == 50 + 1  # + 1 for the first element of the first sequence
+
+
+def test_pyramidal_bi_recurrence():
+    dim = 10
+    width = 2
+    hidden_dim = 30
+    seq_length = 16
+    a = C.sequence.input_variable(dim)
+    b = PyramidalBiRecurrence(LSTM(hidden_dim), LSTM(hidden_dim), width)(a)
+
+    assert b.shape == (hidden_dim * 2 * width, )
+
+    n = np.random.random((1, 16, 10))
+    result = b.eval({a: n})[0]
+
+    assert result.shape == (seq_length / width, hidden_dim * 2 * width)
 
 
 def test_variational_dropout():

@@ -4,6 +4,7 @@ First / higher-order functions over sequences, like :func:`Recurrence`.
 
 
 import cntk as C
+import cntkx as Cx
 from cntk.ops import splice
 from cntk.layers import SentinelValueForAutoSelectRandomSeed
 from cntk.layers.blocks import _get_initial_state_or_default, _inject_name
@@ -163,6 +164,27 @@ def Recurrence(step_function, go_backwards=default_override_or(False), initial_s
         return dropped_y
 
     return _inject_name(recurrence, name)
+
+
+def PyramidalBiRecurrence(step_fxn_f, step_fxn_b, width, initial_state_f=0, initial_state_b=0,
+                           variational_dropout_rate_input=None, variational_dropout_rate_output=None,
+                           seed=SentinelValueForAutoSelectRandomSeed, name=''):
+
+    forward = Recurrence(step_fxn_f, initial_state=initial_state_f, go_backwards=False,
+                         return_full_state=False, variational_dropout_rate_input=variational_dropout_rate_input,
+                         variational_dropout_rate_output=variational_dropout_rate_output, seed=seed, name='Pyramidal_Forward')
+
+    backward = Recurrence(step_fxn_b, initial_state=initial_state_b, go_backwards=True,
+                          return_full_state=False, variational_dropout_rate_input=variational_dropout_rate_input,
+                          variational_dropout_rate_output=variational_dropout_rate_output, seed=seed, name='Pyramidal_Backward')
+
+    @C.BlockFunction('PyramidalBiRecurrence', name)
+    def inner(x):
+        y = C.splice(forward(x), backward(x), axis=-1)
+        z = Cx.sequence.window(y, width)
+        return z
+
+    return inner
 
 
 def VariationalDropout(dropout_rate: float, seed=SentinelValueForAutoSelectRandomSeed, name=''):

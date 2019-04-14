@@ -130,3 +130,32 @@ def join(a, b):
 
     ab = C.sequence.gather(ab_w_pad, ab_condition)
     return ab
+
+
+def window(x, width, new_axis=False):
+    """ Creates a non-overlapping window in sequence tensor
+
+    It effectively reduces the sequence length by k factor while increasing tensor dimension by k factor.
+    Useful to reduce computation workload in recurrent networks. Used in pyramidal BLSTM in acoustic modelling.
+
+    Example:
+        width = 2
+        a = C.sequence.input_variable(10)
+        b = Cx.sequence.window(a, width)
+
+        assert b.shape == (10 * k, )  # while sequence length reduces by a factor of k
+
+    Arguments:
+        x: input tensor
+        width: width of window
+        new_axis (bool): whether to concatenate to a new static axis or concatenate to the last axis
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+        A new sequence tensor with sequence length by k factor with tensor dimension increased by k factor
+
+    """
+    w = [x] + [C.sequence.future_value(x, time_step=1 + i) for i in range(width - 1)]
+    w = C.splice(*w, axis=C.Axis.new_leading_axis() if new_axis else -1)
+    y = stride(w, width)
+    return y

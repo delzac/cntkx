@@ -1,5 +1,5 @@
 import cntk as C
-from cntkx.ops.sequence import length, pad, stride, position, join
+from cntkx.ops.sequence import length, pad, stride, position, join, window
 import numpy as np
 
 
@@ -127,3 +127,44 @@ def test_join():
 
     for result, desired in zip(joined, nm):
         np.testing.assert_equal(result, desired)
+
+
+def test_window():
+    # ====================================================================
+    # window width = 2
+    # ====================================================================
+    seq_length = 20
+    dim = 1
+    k = 2
+    a = C.sequence.input_variable(dim)
+    b = window(a, width=k)
+
+    assert b.shape == (dim * k, )
+
+    n = np.random.random((1, seq_length, dim)).astype(np.float32)
+    m = np.pad(n[:, 1:, :], ((0, 0), (0, 1), (0, 0)), mode='constant', constant_values=0,)
+
+    result = b.eval({a: n})[0]
+    desired = np.concatenate((n, m), axis=-1)[0, ::k]
+
+    np.testing.assert_equal(result, desired)
+
+    # ====================================================================
+    # window width = 3
+    # ====================================================================
+    seq_length = 16
+    dim = 4
+    k = 3
+    a = C.sequence.input_variable(dim)
+    b = window(a, width=k)
+
+    assert b.shape == (dim * k,)
+
+    n = np.random.random((1, seq_length, dim)).astype(np.float32)
+    m = np.pad(n[:, 1:, :], ((0, 0), (0, 1), (0, 0)), mode='constant', constant_values=0, )
+    o = np.pad(n[:, 2:, :], ((0, 0), (0, 2), (0, 0)), mode='constant', constant_values=0, )
+
+    result = b.eval({a: n})[0]
+    desired = np.concatenate((n, m, o), axis=-1)[0, ::k]
+
+    np.testing.assert_equal(result, desired)

@@ -149,3 +149,42 @@ def binary_focal_loss(output, target, alpha=1., gamma=2., name=''):
     factorB = C.pow(output, gamma)
 
     return C.negate(alpha * (factorA * logprobA + factorB * logprobB), name=name)
+
+
+def cross_entropy_with_softmax(output_vector, target_vector, axis=-1, label_smoothing=0., name=''):
+    """ Adds label smoothing regularisation to C.cross_entropy_with_softmax
+
+    Label smoothing regularisation prevents the largest logit from becoming much larger than all others.
+
+    Classical cross entropy maximises log-likelihood of the correct label. This can cause overfitting.
+    If the model learns to assign full probability to the ground-truth label for each training example, it
+    is not guaranteed to generalize. Second, it encourages the differences between the largest logit and all others to
+    become large, and this, combined with the bounded gradient, reduces the ability of the model to adapt.
+    Intuitively, this happens because the model becomes too confident about its predictions.
+
+    To solve this, we introduce label smoothing.
+
+    For more details on label smoothing, please refer to Rethinking the Inception Architecture for Computer Vision
+    by Szegedy et al. (https://arxiv.org/abs/1512.00567)
+
+    Arguments:
+        output_vector: the unscaled computed output values from the network
+        target_vector: usually it is one-hot vector where the hot bit
+         corresponds to the label index. But it can be any probability
+         distribution over the labels.
+        axis (int or :class:`~cntk.axis.Axis`, optional): if given, cross entropy will be computed
+                along this axis
+        label_smoothing (float): a small label smoothing constant. As a guideline, in ImageNet training of 1000 classes,
+            label_smoothing can be set to 0.1
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+
+    """
+    if label_smoothing == 0.:
+        return C.cross_entropy_with_softmax(output_vector, target_vector, axis=axis, name=name)
+    else:
+        k = output_vector.shape[axis]
+        target_vector = (1 - label_smoothing) * target_vector + label_smoothing / k
+        return C.cross_entropy_with_softmax(output_vector, target_vector, axis=axis, name=name)

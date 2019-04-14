@@ -27,6 +27,7 @@ cntkx only works with `python>=3.6`
 | `sequence.position` | position of every sequence element |
 | `sequence.stride` | strides across sequential axis  |
 | `sequence.join` | joins two sequence along their sequential axis  |
+| `sequence.window` | creates non-overlapping window along the sequence axis  |
 | `random.sample` | Samples a given probability distribution |
 | `batchmatmul` | Batch Matrix Multiplication on a static batch axis, similar to tf.matmul |
 
@@ -34,6 +35,7 @@ cntkx only works with `python>=3.6`
 | --- | ---|
 | `QRNN` | Quasi-Recurrent Neural Network |
 | `Recurrence` | With option to apply `VariationalDroppout` |
+| `PyramidalBiRecurrence` | Pyramidal bi-directional recurrence |
 | `VariationalDropout` | Single binary dropout mask for entire sequence |
 | `SinusoidalPositionalEmbedding` | Non-learnable positional embedding (no max sequence length) |
 | `PositionalEmbedding` | Learnable Positional Embedding (used in BERT) |
@@ -57,6 +59,7 @@ cntkx only works with `python>=3.6`
 | --- | ---|
 | `gaussian_mdn_loss` | loss function when using Mixture density network |
 | `focal_loss_with_softmax` | A kind of cross entropy that handles extreme class imbalance |
+| `cross_entropy_with_softmax` | Added `label smoothing regularisation` in cross entropy with softmax |
 
 | Models | Description |
 | --- | ---|
@@ -83,6 +86,16 @@ and [DeepBelief_Course4_Examples](https://github.com/AllanYiin/DeepBelief_Course
 
 
 ## News
+***2019-04-14.***
+#### Added `Label Smoothing Regularization`, `seqeuence.window` and `PyramidalBiRecurrence`
+Added `Label Smoothing Regularization` in `cross_entropy_with_softmax`.
+Added `sequence.window` that creates non-overlapping window along the sequence axis thereby reducing the 
+sequence length and increasing the dimension by the same factor.
+
+Implemented a convenience layer for acoustic modelling known as `PyramidalBiRecurrence`. Used to create
+pyramidal bi-directional LSTM (BLSTM) found in "Listen, attend and spell" by Chan et al. (https://arxiv.org/abs/1508.01211)
+
+
 ***2019-04-08.***
 #### Added `cntkx.ops.sequence.join`
 Added a new `op` called `join` where two sequence tensors can be joined along with sequence axis forming a longer sequence.

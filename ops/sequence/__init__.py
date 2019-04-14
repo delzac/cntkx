@@ -65,7 +65,7 @@ def position(x, name=''):
         a sequence tensor of shape (1,) with value of 0 to `seq_length` depending on position
     """
 
-    @C.BlockFunction('sequence_position', name)
+    @C.BlockFunction('Sequence::Position', name)
     def inner(a):
         # reconcile_dynamic_axes is necessary to avoid subtle bugs e.g. sequence.where and one_hot
         return C.reconcile_dynamic_axes(C.sequence.where(C.ones_like(Cx.scalar(a))), a)
@@ -83,13 +83,14 @@ def stride(x, s, tol=0.2, name=''):
         x: input sequence tensor
         s (int): sequential stride
         tol (float): tolerance due to precision error of applying `sin` function, valid seq item not exactly zero.
+        name (str): name of function
 
     Returns:
         :class:`~cntk.ops.functions.Function`
         Every `s` sequence item of `x` starting from the first sequence item
 
     """
-    @C.BlockFunction('sequence_stride', name)
+    @C.BlockFunction('Sequence::Stride', name)
     def inner(a):
         p = position(a)
         integers = p / s  # every s sequence item will be an integer
@@ -100,7 +101,7 @@ def stride(x, s, tol=0.2, name=''):
     return inner(x)
 
 
-def join(a, b):
+def join(x, y, name=''):
     """ joins two sequences along their dynamic sequence axis. Static axis between a and b
     must be the same and the dimensions of the static axes will remain unchanged in the op.
 
@@ -116,25 +117,31 @@ def join(a, b):
         assert ab.shape == a.shape == b.shape == (3, )
 
     Arguments:
-        a: Sequence tensor
-        b: Sequence tensor
+        x: Sequence tensor
+        y: Sequence tensor
+        name (str): name of function
 
     Returns:
         :class:`~cntk.ops.functions.Function`
         A new sequence tensor with sequence axis that is the concatenation of the seq axis of a and b
 
     """
-    a_unpacked, a_mask = C.sequence.unpack(a, padding_value=0).outputs
-    b_unpacked, b_mask = C.sequence.unpack(b, padding_value=0).outputs
 
-    ab_unpacked = C.splice(a_unpacked, b_unpacked, axis=0)
-    ab_mask = C.expand_dims(C.splice(a_mask, b_mask), axis=-1)
+    @C.BlockFunction("Sequence::Join", name)
+    def inner(a, b):
+        a_unpacked, a_mask = C.sequence.unpack(a, padding_value=0).outputs
+        b_unpacked, b_mask = C.sequence.unpack(b, padding_value=0).outputs
 
-    ab_w_pad = C.to_sequence(ab_unpacked)
-    ab_condition = C.to_sequence(ab_mask)
+        ab_unpacked = C.splice(a_unpacked, b_unpacked, axis=0)
+        ab_mask = C.expand_dims(C.splice(a_mask, b_mask), axis=-1)
 
-    ab = C.sequence.gather(ab_w_pad, ab_condition)
-    return ab
+        ab_w_pad = C.to_sequence(ab_unpacked)
+        ab_condition = C.to_sequence(ab_mask)
+
+        ab = C.sequence.gather(ab_w_pad, ab_condition)
+        return ab
+
+    return inner(x, y)
 
 
 def window(x, width, new_axis=False, name=''):
@@ -154,6 +161,7 @@ def window(x, width, new_axis=False, name=''):
         x: input tensor
         width: width of window
         new_axis (bool): whether to concatenate to a new static axis or concatenate to the last axis
+        name (str): name of function
 
     Returns:
         :class:`~cntk.ops.functions.Function`
@@ -161,7 +169,7 @@ def window(x, width, new_axis=False, name=''):
 
     """
 
-    @C.BlockFunction('window', name)
+    @C.BlockFunction('Sequence::Window', name)
     def inner(a):
         w = [a] + [C.sequence.future_value(a, time_step=1 + i) for i in range(width - 1)]
         w = C.splice(*w, axis=C.Axis.new_leading_axis() if new_axis else -1)

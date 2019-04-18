@@ -78,6 +78,10 @@ cntkx only works with `python>=3.6`
 | --- | ---|
 | `CyclicalLearningRate` | a method to eliminate the need to find best value and schedule for learning rate |
 
+| Misc | Description |
+| --- | ---|
+| `CTCEncoder` | Helper class to convert data into a format acceptable for cntk's ctc implementation |
+
 
 ## C# CNTK Tutorials
 This library is implemented in pure cntk python API. For help in cntk c#, you can refer to the two repository 
@@ -91,6 +95,32 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-04-19.***
+#### Added `cntkx.misc.CTCEncoder`
+CNTK's CTC implementation requires that data be formatted in a particular way that's typically in acoustic
+modeling but unusual in other applications. So class provides an easy way to convert data between
+what users typically expect and what cntk demands.
+
+Example:
+    labels = ['a', 'b', 'c']
+    encoder = CTCEncoder(labels)
+
+    labels_tensor = C.sequence.input_variable(len(encoder.classes_))  # number of classes = 4
+    input_tensor = C.sequence.input_variable(100)
+
+    labels_graph = cntk.labels_to_graph(labels_tensors)
+    network_out = model(input_tensor)
+
+    fb = forward_backward(labels_graph, network_out, blankTokenId=encoder.blankTokenId)
+
+    ground_truth = ['a', 'b', 'b', 'b', 'c']
+    seq_length = 10  # must be the same length as the sequence length in network_out
+
+    fb.eval({input_tensor: [...)],
+             labels_tensor: [encoder.transform(ground_truth, seq_length=seq_length)]})
+
+
+
 ***2019-04-14.***
 #### Added `Label Smoothing Regularization`, `seqeuence.window` and `PyramidalBiRecurrence`
 Added `Label Smoothing Regularization` in `cross_entropy_with_softmax`.

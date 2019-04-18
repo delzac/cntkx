@@ -1,6 +1,73 @@
 import cntk as C
 import cntkx as Cx
 import numpy as np
+from typing import List, Union
+from sklearn.preprocessing import LabelBinarizer
+
+
+class CTCEncoder:
+    """ Class to help convert data into an acceptable format for ctc training.
+
+    CNTK's CTC implementation requires that data be formatted in a particular way that's typically in acoustic
+    modeling but unusual in other applications. So class provides an easy way to convert data between
+    what users typically expect and what cntk demands.
+
+    Example:
+        labels = ['a', 'b', 'c']
+        encoder = CTCEncoder(labels)
+
+        labels_tensor = C.sequence.input_variable(len(encoder.classes_))  # number of classes = 4
+        input_tensor = C.sequence.input_variable(100)
+
+        labels_graph = cntk.labels_to_graph(labels_tensors)
+        network_out = model(input_tensor)
+
+        fb = forward_backward(labels_graph, network_out, blankTokenId=encoder.blankTokenId)
+
+        ground_truth = ['a', 'b', 'b', 'b', 'c']
+        seq_length = 10  # must be the same length as the sequence length in network_out
+
+        fb.eval({input_tensor: [...)],
+                 labels_tensor: [encoder.transform(ground_truth, seq_length=seq_length)]})
+
+    """
+
+    def __init__(self, labels: List[Union[str, int]]):
+        """
+
+        Arguments:
+            labels (List[Union[str, int]]): labels can either be a list of ints representing the class index or
+              a list of str representing the name of the class directly
+
+        """
+        self.ctc_blank = '<CTC_BLANK>' if all(isinstance(l, str) for l in labels) else max(labels) + 1
+
+        self.label_binarizer = LabelBinarizer(pos_label=2)
+        self.label_binarizer.fit(labels + [self.ctc_blank])
+        self.classes_ = self.label_binarizer.classes_
+        self.blankTokenId = self.classes_.tolist().index(self.ctc_blank)
+
+    def transform(self, labels: List[Union[str, int]], seq_length: int) -> np.ndarray:
+        labels_binarized = self.label_binarizer.transform(labels)
+
+        # insert fake second frame if there are repeated labels adjacent to each other
+        double = [(i, a) for i, (a, b) in enumerate(zip(labels_binarized[:-1], labels_binarized[1:])) if np.all(a == b)]
+        indices, values = zip(*double)
+        values = [value / 2 for value in values]  # 1 to indicate within phone boundary
+        indices = [i + 1 for i in indices]  # np inserts before index
+        labels_binarized = np.insert(labels_binarized, indices, values, axis=0)
+
+        # pad to sequence length
+        sequence = np.zeros(shape=(seq_length, labels_binarized.shape[1]))
+        sequence[:labels_binarized.shape[0], ...] = labels_binarized
+        sequence[labels_binarized.shape[0]:, labels_binarized[-1].argmax()] = 1
+        return sequence.astype(np.float32)
+
+    def inverse_transform(self, encoded: np.ndarray) -> List[Union[str, int]]:
+        mask = np.sum(encoded, axis=1) != 1
+        labels = encoded[mask, ...]
+        labels = self.label_binarizer.inverse_transform(labels)
+        return labels.tolist()
 
 
 ##########################################################################

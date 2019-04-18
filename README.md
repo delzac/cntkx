@@ -85,6 +85,11 @@ This library is implemented in pure cntk python API. For help in cntk c#, you ca
 and [DeepBelief_Course4_Examples](https://github.com/AllanYiin/DeepBelief_Course4_Examples). 
 
 
+## F# CNTK
+For the F# wrapper of CNTK please visit [FsCNTK](https://github.com/fwaris/FsCNTK), 
+it also contains some example implementations like seq2seq, autoencoder, LSTM, GAN.
+
+
 ## News
 ***2019-04-14.***
 #### Added `Label Smoothing Regularization`, `seqeuence.window` and `PyramidalBiRecurrence`

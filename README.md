@@ -108,15 +108,15 @@ Example:
     labels_tensor = C.sequence.input_variable(len(encoder.classes_))  # number of classes = 4
     input_tensor = C.sequence.input_variable(100)
 
-    labels_graph = cntk.labels_to_graph(labels_tensors)
+    labels_graph = cntk.labels_to_graph(labels_tensor)
     network_out = model(input_tensor)
 
-    fb = forward_backward(labels_graph, network_out, blankTokenId=encoder.blankTokenId)
+    fb = C.forward_backward(labels_graph, network_out, blankTokenId=encoder.blankTokenId)
 
     ground_truth = ['a', 'b', 'b', 'b', 'c']
     seq_length = 10  # must be the same length as the sequence length in network_out
 
-    fb.eval({input_tensor: [...)],
+    fb.eval({input_tensor: [...],
              labels_tensor: [encoder.transform(ground_truth, seq_length=seq_length)]})
 
 

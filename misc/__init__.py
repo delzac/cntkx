@@ -19,15 +19,15 @@ class CTCEncoder:
         labels_tensor = C.sequence.input_variable(len(encoder.classes_))  # number of classes = 4
         input_tensor = C.sequence.input_variable(100)
 
-        labels_graph = cntk.labels_to_graph(labels_tensors)
+        labels_graph = C.labels_to_graph(labels_tensor)
         network_out = model(input_tensor)
 
-        fb = forward_backward(labels_graph, network_out, blankTokenId=encoder.blankTokenId)
+        fb = C.forward_backward(labels_graph, network_out, blankTokenId=encoder.blankTokenId)
 
         ground_truth = ['a', 'b', 'b', 'b', 'c']
         seq_length = 10  # must be the same length as the sequence length in network_out
 
-        fb.eval({input_tensor: [...)],
+        fb.eval({input_tensor: [...],
                  labels_tensor: [encoder.transform(ground_truth, seq_length=seq_length)]})
 
     """
@@ -48,6 +48,17 @@ class CTCEncoder:
         self.blankTokenId = self.classes_.tolist().index(self.ctc_blank)
 
     def transform(self, labels: List[Union[str, int]], seq_length: int) -> np.ndarray:
+        """ Transform labels into ground truth data acceptable by cntk's forward-backward
+
+        Arguments:
+            labels (List[Union[str, int]]): list of string or int representing the labels/class
+            seq_length (int): length of sequence to be padded until (seq length must be same as seq length in model output)
+
+        Returns:
+            np.ndarray
+            Padded sequence array that is ready to be consume by cntk's forward-backward
+
+        """
         labels_binarized = self.label_binarizer.transform(labels)
 
         # insert fake second frame if there are repeated labels adjacent to each other
@@ -64,10 +75,44 @@ class CTCEncoder:
         return sequence.astype(np.float32)
 
     def inverse_transform(self, encoded: np.ndarray) -> List[Union[str, int]]:
+        """ Inverse operation of transform
+
+        Arguments:
+            encoded (np.ndarray): numpy 2d array
+
+        Returns:
+            List[Union[str, int]]
+            The labels that would result in encoded if labels feed into transform()
+        """
         mask = np.sum(encoded, axis=1) != 1
         labels = encoded[mask, ...]
         labels = self.label_binarizer.inverse_transform(labels)
         return labels.tolist()
+
+    def network_output_to_labels(self, network_output: np.ndarray, squash_repeat=True) -> List[Union[str, int]]:
+        """ Parse model network output into labels that are human readable
+
+        Network output after ctc training is not in the same format as what transform produces.
+
+        Arguments:
+            network_output (np.ndarray): outputs from network model (output layer should have no activation)
+            squash_repeat (bool): whether to merge sequences of identical samples. If true then "-aa--abb" will be
+                                  squash to "-a-ab"
+
+        Returns:
+            Labels (list of label)
+
+        """
+        assert network_output.ndim == 2, "expect shape (seq_length, classes + blank)"
+
+        labels = self.label_binarizer.inverse_transform(network_output).tolist()
+
+        if squash_repeat:
+            labels.append('END99999')  # append dummy at end to preserve length of list
+            labels = [i for i, j in zip(labels[:-1], labels[1:]) if i != j]
+
+        labels = [l for l in labels if l != self.ctc_blank]
+        return labels
 
 
 ##########################################################################

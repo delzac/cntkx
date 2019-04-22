@@ -1,8 +1,8 @@
 # CNTKx
-Deep learning library that builds on and extends Microsoft Cognitive Toolkit [CNTK](https://github.com/Microsoft/CNTK). 
-This library is in active development, more models and pre-built components coming soon!
+CNTKx is a deep learning library that builds on and extends Microsoft Cognitive Toolkit [CNTK](https://github.com/Microsoft/CNTK). 
+Despite the last planned release of cntk 2.7, cntkx will continue to be in active development, more models and pre-built components coming soon!
 
-Contributions are very welcomed!
+Feel free to open an issue for any request or a PR to contributions :)
 
 ## Installation
 cntk is a dependency to cntkx. Please get a working installation of cntk first. Then:

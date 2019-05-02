@@ -63,10 +63,12 @@ class CTCEncoder:
 
         # insert fake second frame if there are repeated labels adjacent to each other
         double = [(i, a) for i, (a, b) in enumerate(zip(labels_binarized[:-1], labels_binarized[1:])) if np.all(a == b)]
-        indices, values = zip(*double)
-        values = [value / 2 for value in values]  # 1 to indicate within phone boundary
-        indices = [i + 1 for i in indices]  # np inserts before index
-        labels_binarized = np.insert(labels_binarized, indices, values, axis=0)
+
+        if len(double) > 0:
+            indices, values = zip(*double)
+            values = [value / 2 for value in values]  # 1 to indicate within phone boundary
+            indices = [i + 1 for i in indices]  # np inserts before index
+            labels_binarized = np.insert(labels_binarized, indices, values, axis=0)
 
         # pad to sequence length
         sequence = np.zeros(shape=(seq_length, labels_binarized.shape[1]))

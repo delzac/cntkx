@@ -74,6 +74,30 @@ def test_ctc_encoder_string_labels():
     decoded = encoder.inverse_transform(actual)
     assert labels == decoded
 
+    seq_length = 15
+    labels = list('abcabcabc')
+    actual = encoder.transform(labels, seq_length)
+
+    desired = [[0, 2, 0, 0],
+               [0, 0, 2, 0],
+               [0, 0, 0, 2],
+               [0, 2, 0, 0],
+               [0, 0, 2, 0],
+               [0, 0, 0, 2],
+               [0, 2, 0, 0],
+               [0, 0, 2, 0],
+               [0, 0, 0, 2],]
+
+    desired += [[0, 0, 0, 1]] * 6
+
+    desired = np.array(desired)
+
+    np.testing.assert_equal(actual, desired)
+
+    # test inverse
+    decoded = encoder.inverse_transform(actual)
+    assert labels == decoded
+
 
 def test_ctc_encoder_int_labels():
     label_set = list(range(3))

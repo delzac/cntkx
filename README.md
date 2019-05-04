@@ -48,6 +48,7 @@ cntkx only works with `python>=3.6`
 | `GaussianWindowAttention` | Windowed attention instead of conventional attention where everything is attended at the same time |
 | `SequentialMaxPooling` | Max pool across sequential axis and static axes |
 | `SequentialAveragePooling` | Average pool across sequential axis and static axes |
+| `vFSMN` | Vectorised Feedforward Sequential Memory Networks |
 
 | Blocks | Description |
 | --- | ---|
@@ -95,6 +96,40 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-05-04.***
+#### Added `cntkx.layers.vFSMN`
+CNTK implementation of Bidirectional vectorised Feedforward Sequential Memory Network (vFSMN).
+
+FSMN is a standard fully-connected feedforward neural network equipped
+with some learnable memory blocks in its hidden layers. The memory blocks
+use a tapped-delay line structure to encode the long context information into
+a fixed-size representation as short-term memory mechanism.
+
+The authors claim that FSMNs can be learned much more reliably and faster than
+RNNs or LSTMs due to the inherent non-recurrent model structure while significantly
+outperforming RNNs in language and speech modeling.
+
+For more details please refer to [Feedforward Sequential Memory Networks: A 
+New Structure to Learn Long-term Dependency](https://arxiv.org/abs/1512.08301)
+
+Example:
+    
+    import cntk as C
+    from cntkx.layers import vFSMN
+    
+    # unidirectional vFSMN (only past conext used)
+    a = C.sequence.input_variable(10)
+    b = vFSMN(100, C.relu, num_past_context=3, num_future_context=0)(a)
+
+    assert b.shape == (100,)
+    
+    # bidirectional vFSMN (enable both past and future context)
+    a = C.sequence.input_variable(10)
+    b = vFSMN(120, C.relu, num_past_context=3, num_future_context=3)(a)
+
+    assert b.shape == (120,)
+
+
 ***2019-04-19.***
 #### Added `cntkx.misc.CTCEncoder`
 CNTK's CTC implementation requires that data be formatted in a particular way that's typically in acoustic

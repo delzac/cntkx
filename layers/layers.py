@@ -1318,7 +1318,7 @@ def PositionwiseFeedForward(model_dim: int, intermediate_dim: int, dropout_rate:
 
 def vFSMN(shape, activation, num_past_context, num_future_context, input_rank=None, init=C.glorot_normal(), bias=True,
           init_bias=0, name=''):
-    """ Bi-directional vectorised encoding Feedforward sequential memory neural network
+    """ Bi-directional vectorised Feedforward sequential memory network
 
     Implementation of feedforward sequential memory networks (FSMN), to model
     long-term dependency in time series without using recurrent feedback.
@@ -1334,6 +1334,18 @@ def vFSMN(shape, activation, num_past_context, num_future_context, input_rank=No
 
     For more details please refer to "Feedforward Sequential Memory Networks: A New
     Structure to Learn Long-term Dependency" by Zhang, et al.
+
+    Example:
+        a = C.sequence.input_variable(10)
+        b = vFSMN(100, C.relu, num_past_context=3, num_future_context=0)(a)
+
+        assert b.shape == (100,)
+
+        # bidirectional vFSMN (enable both past and future context)
+        a = C.sequence.input_variable(10)
+        b = vFSMN(120, C.relu, num_past_context=3, num_future_context=3)(a)
+
+        assert b.shape == (120,)
 
     Arguments:
         shape (`int` or `tuple` of `ints`): vector or tensor dimension of the output of this layer

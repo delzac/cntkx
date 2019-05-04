@@ -1314,3 +1314,81 @@ def PositionwiseFeedForward(model_dim: int, intermediate_dim: int, dropout_rate:
         return outer_dense(dropout(C.relu(inner_dense(x))))
 
     return inner
+
+
+def vFSMN(shape, activation, num_past_context, num_future_context, input_rank=None, init=C.glorot_normal(), bias=True,
+          init_bias=0, name=''):
+    """ Bi-directional vectorised encoding Feedforward sequential memory neural network
+
+    Implementation of feedforward sequential memory networks (FSMN), to model
+    long-term dependency in time series without using recurrent feedback.
+
+    FSMN is a standard fully-connected feedforward neural network equipped
+    with some learnable memory blocks in its hidden layers. The memory blocks
+    use a tapped-delay line structure to encode the long context information into
+    a fixed-size representation as short-term memory mechanism.
+
+    The authors claim that FSMNs can be learned much more reliably and faster than
+    RNNs or LSTMs due to the inherent non-recurrent model structure while significantly
+    outperforming RNNs in language and speech modeling.
+
+    For more details please refer to "Feedforward Sequential Memory Networks: A New
+    Structure to Learn Long-term Dependency" by Zhang, et al.
+
+    Arguments:
+        shape (`int` or `tuple` of `ints`): vector or tensor dimension of the output of this layer
+        activation (:class:`~cntk.ops.functions.Function`, defaults to identity): optional function to apply at the end, e.g. `relu`
+        num_past_context (int): number of previous frames/ time steps to use to build memory
+        num_future_context (int): number of future frames/ time steps to use to build memory
+        init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): initial value of weights `W`
+        input_rank (int, defaults to `None`): number of inferred axes to add to W (`map_rank` must not be given)
+        bias (bool, optional, defaults to `True`): the layer will have no bias if `False` is passed here
+        init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
+        name (str, defaults to ''): the name of the function instance in the network
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the operation to it
+    """
+    output_shape = _as_tuple(shape)
+    output_rank = len(output_shape)   # support outputs with tensor layouts
+
+    if output_rank > 1:
+        raise ValueError(f"Shape {output_shape} cannot be 2 dimensional and above")
+
+    # parameters bound to this Function
+    if isinstance(init, np.ndarray):
+        init_weights = init
+    else:
+        init_weights = _initializer_for(init, Record(output_rank=output_rank))
+
+    # If input_rank not given then pass a single _INFERRED; map_rank if given will determine the input_rank.
+    # The dimension inference may still create multiple axes.
+    input_shape = _INFERRED * (input_rank if input_rank is not None else 1)
+
+    W = C.Parameter(shape=input_shape + output_shape, init=init_weights, name='W')
+    H = C.Parameter(shape=input_shape + output_shape, init=init_weights, name='H')
+    a = C.Parameter(shape=input_shape * 2, name='a')  # shape = (-1, -1)
+    b = C.Parameter(shape=output_shape, init=init_bias,    name='b') if bias else None
+
+    @C.BlockFunction('vFSMN', name)
+    def inner(x):
+        past = [C.sequence.delay(x, time_step=i + 1) for i in range(num_past_context)]
+        future = [C.sequence.delay(x, time_step=i + 1) for i in range(num_future_context)]
+
+        # compute memory
+        hidden_memory = C.splice(x, *past, *future, axis=C.Axis.new_leading_axis())
+        hidden_memory = hidden_memory * a
+        hidden_memory = C.squeeze(C.reduce_sum(hidden_memory, axis=0), axes=0)  # BUGBUG: keepdim must be True
+
+        r = C.times(x, W) + C.times(hidden_memory, H)
+
+        if bias:
+            r = r + b
+
+        if activation is not None:
+            r = activation(r)
+
+        return r
+
+    return inner

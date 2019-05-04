@@ -3,6 +3,7 @@ import cntkx as Cx
 from cntkx.layers import QRNN, SinusoidalPositionalEmbedding, SpatialPyramidPooling, GatedLinearUnit
 from cntkx.layers import BertEmbeddings, PositionalEmbedding, SequentialAveragePooling
 from cntkx.layers import PreTrainedBertEmbeddings, PositionwiseFeedForward, SequentialMaxPooling
+from cntkx.layers import vFSMN
 import numpy as np
 
 
@@ -815,3 +816,43 @@ def test_sequential_convolution():
         actual = actual[0]
 
     np.testing.assert_equal(actual, desired)
+
+
+def test_vfsmn():
+    in_dim = 10
+    hidden_dim = 100
+    num_past_context = 3
+    num_future_context = 0
+    a = C.sequence.input_variable(in_dim)
+    b = vFSMN(hidden_dim, C.relu, num_past_context, num_future_context)(a)
+
+    assert b.shape == (hidden_dim,)
+    assert b.b.shape == (hidden_dim,)
+    assert b.a.shape == (num_past_context + num_future_context + 1, in_dim)
+    assert b.H.shape == (in_dim, hidden_dim)
+    assert b.W.shape == (in_dim, hidden_dim)
+
+    n = [np.random.random((15, in_dim)).astype(np.float32),
+         np.random.random((7, in_dim)).astype(np.float32),
+         np.random.random((20, in_dim)).astype(np.float32), ]
+
+    b.eval({a: n})
+
+    in_dim = 10
+    hidden_dim = 20
+    num_past_context = 3
+    num_future_context = 3
+    a = C.sequence.input_variable(in_dim)
+    b = vFSMN(hidden_dim, C.relu, num_past_context, num_future_context)(a)
+
+    assert b.shape == (hidden_dim,)
+    assert b.b.shape == (hidden_dim,)
+    assert b.a.shape == (num_past_context + num_future_context + 1, in_dim)
+    assert b.H.shape == (in_dim, hidden_dim)
+    assert b.W.shape == (in_dim, hidden_dim)
+
+    n = [np.random.random((15, in_dim)).astype(np.float32),
+         np.random.random((7, in_dim)).astype(np.float32),
+         np.random.random((20, in_dim)).astype(np.float32), ]
+
+    b.eval({a: n})

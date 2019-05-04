@@ -49,6 +49,7 @@ cntkx only works with `python>=3.6`
 | `SequentialMaxPooling` | Max pool across sequential axis and static axes |
 | `SequentialAveragePooling` | Average pool across sequential axis and static axes |
 | `vFSMN` | Vectorised Feedforward Sequential Memory Networks |
+| `cFSMN` | Compact Feedforward Sequential Memory Networks |
 
 | Blocks | Description |
 | --- | ---|
@@ -97,8 +98,9 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 ## News
 ***2019-05-04.***
-#### Added `cntkx.layers.vFSMN`
-CNTK implementation of Bidirectional vectorised Feedforward Sequential Memory Network (vFSMN).
+#### Added `cntkx.layers.vFSMN` and `cntkx.layers.cFSMN`
+CNTK implementation of Bidirectional vectorised Feedforward Sequential Memory Network (vFSMN)
+and Compact Feedforward Sequential Memory Network (cFSMN).
 
 FSMN is a standard fully-connected feedforward neural network equipped
 with some learnable memory blocks in its hidden layers. The memory blocks
@@ -112,10 +114,18 @@ outperforming RNNs in language and speech modeling.
 For more details please refer to [Feedforward Sequential Memory Networks: A 
 New Structure to Learn Long-term Dependency](https://arxiv.org/abs/1512.08301)
 
+cFSMN is a compact version of FSMN that can result in a reduction of up
+to 60% in model size and speed up the learning by more than 7 times while
+still significantly outperforming the popular bi-direction LSTMs for both
+frame-level cross-entropy (CE) criterion based training and MMI based sequence training.
+
+For more details please refer to "Compact Feedforward Sequential Memory Networks for
+Large VocabularyContinuous Speech Recognition" by Zhang, et al.
+
 Example:
     
     import cntk as C
-    from cntkx.layers import vFSMN
+    from cntkx.layers import vFSMN, cFSMN
     
     # unidirectional vFSMN (only past conext used)
     a = C.sequence.input_variable(10)
@@ -126,6 +136,12 @@ Example:
     # bidirectional vFSMN (enable both past and future context)
     a = C.sequence.input_variable(10)
     b = vFSMN(120, C.relu, num_past_context=3, num_future_context=3)(a)
+
+    assert b.shape == (120,)
+    
+    # bidirectional cFSMN (enable both past and future context)
+    a = C.sequence.input_variable(100)
+    b = cFSMN(120, 50, C.relu, num_past_context=3, num_future_context=3)(a)
 
     assert b.shape == (120,)
 

@@ -377,16 +377,16 @@ Example for `PreTrainedBertEmbeddings`
     
 ***2019-03-02.***
 #### Added `VariationalDropout` and `WeightDroppedLSTM`
-CNTK implementation of `VariationalDropout` found in 
+CNTK implementation of `Variational Dropout` found in 
 [A Theoretically Grounded Application of Dropout in Recurrent Neural Networks](https://arxiv.org/abs/1512.05287)
-and `WeightDroppedLSTM` proposed in a salesforce research paper 
+and `Weight Dropped LSTM` proposed in a salesforce research paper 
 [Regularizing and Optimizing LSTM Language Models](https://arxiv.org/abs/1708.02182).
 
-`WeightDroppedLSTM` is a regularised LSTM that uses DropConnect on hidden-to-hidden weights as a form of recurrent
+`Weight Dropped LSTM` is a regularised LSTM that uses DropConnect on hidden-to-hidden weights as a form of recurrent
 regularisation. It also include application of variational dropout on the inputs and outputs of the recurrent units
 for further regularisation.
 
-`VariationalDrpoout` is a regularisation that uses same dropout mask at each time step 
+`Variational Drpoout` is a regularisation that uses same dropout mask at each time step 
 (i.e. across the dynamic sequence axis) as opposed to the naive application of `C.layers.Dropout` to a sequence
 which will result in a different dropout mask for every tensor along the sequence axis.
 

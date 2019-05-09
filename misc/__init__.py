@@ -1,5 +1,3 @@
-import cntk as C
-import cntkx as Cx
 import numpy as np
 from typing import List, Union
 from sklearn.preprocessing import LabelBinarizer
@@ -70,6 +68,9 @@ class CTCEncoder:
             indices = [i + 1 for i in indices]  # np inserts before index
             labels_binarized = np.insert(labels_binarized, indices, values, axis=0)
 
+        if seq_length > labels_binarized.shape[1]:
+            raise ValueError(f"seq_length ({seq_length}) is shorter than ctc labels ({labels_binarized.shape[1]}). It must be equal.")
+
         # pad to sequence length
         sequence = np.zeros(shape=(seq_length, labels_binarized.shape[1]))
         sequence[:labels_binarized.shape[0], ...] = labels_binarized
@@ -121,6 +122,9 @@ class CTCEncoder:
 # wrapper
 ##########################################################################
 def greedy_decoder(decoder, input_sequence, start_token, end_token, max_seq_len: int):
+    import cntk as C
+    import cntkx as Cx
+
     """ Greedy decoder wrapper for Transformer decoder. Pure python loop. One batch (sample) at a time.
 
     Example:

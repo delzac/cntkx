@@ -5,7 +5,7 @@ Despite the last planned release of cntk 2.7, cntkx will continue to be in activ
 Feel free to open an issue for any request or a PR to contributions :)
 
 ## Installation
-cntk is a dependency to cntkx. Please get a working installation of cntk first. Then:
+cntkx is written in pure python and cntk is a dependency to it. Please get a working installation of cntk first. Then:
 
     pip install cntkx
 

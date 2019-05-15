@@ -68,8 +68,8 @@ class CTCEncoder:
             indices = [i + 1 for i in indices]  # np inserts before index
             labels_binarized = np.insert(labels_binarized, indices, values, axis=0)
 
-        if seq_length > labels_binarized.shape[1]:
-            raise ValueError(f"seq_length ({seq_length}) is shorter than ctc labels ({labels_binarized.shape[1]}). It must be equal.")
+        if seq_length < labels_binarized.shape[0]:
+            raise ValueError(f"seq_length ({seq_length}) is shorter than ctc labels ({labels_binarized.shape[0]}). It must be equal or larger after frame padding.")
 
         # pad to sequence length
         sequence = np.zeros(shape=(seq_length, labels_binarized.shape[1]))

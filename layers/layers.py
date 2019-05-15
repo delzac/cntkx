@@ -477,7 +477,8 @@ def SequentialConvolution(filter_shape,     # shape of receptive field, e.g. (3,
     bias_filter_rank = len(actual_filter_shape) - 1
     W = C.Parameter(actual_output_channels_shape + kernel_shape,            init=init_kernel, name='W')                   # (K, C, W, H) aka [ H x W x C x K ]
     b = C.Parameter(actual_output_channels_shape + (1,) * bias_filter_rank, init=init_bias,   name='b') if bias else None # (K,    1, 1) aka [ 1 x 1 x     K ]
-    print(W.shape)
+    # print(W.shape)
+
     # expression
     @C.BlockFunction('SequentialConvolution', name)
     def convolve(x):

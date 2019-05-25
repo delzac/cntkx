@@ -14,7 +14,7 @@ import numpy as np
 import cntk as C
 from cntk.layers import Stabilizer, SentinelValueForAutoSelectRandomSeed
 from cntk.variables import Constant, Parameter
-from cntk.ops import times, slice, sigmoid, tanh
+from cntk.ops import times, slice, sigmoid, tanh, relu
 from cntk.internal import _as_tuple
 from cntk.initializer import glorot_uniform
 from cntk.default_options import get_default_override, default_override_or
@@ -224,7 +224,7 @@ def WeightDroppedLSTM(shape, dropout_rate, cell_shape=None, activation=default_o
 
 
 # TODO: change activation default to relu and implement weight constraint
-def IndRNN(shape, activation=default_override_or(sigmoid),
+def IndRNN(shape, activation=default_override_or(relu),
             init=default_override_or(glorot_uniform()), init_bias=default_override_or(0),
             enable_self_stabilization=default_override_or(False), name=''):
     """
@@ -242,6 +242,10 @@ def IndRNN(shape, activation=default_override_or(sigmoid),
     sequences (over 5000 time steps), can be used to construct very deep networks (21 layers used in the experiment)
     and still be trained robustly. Better performances have been achieved on various tasks by using IndRNNs compared
     with the traditional RNN and LSTM.
+
+    IndRNN also enables the usable of Relu activation which more efficient to compute than sigmoid and leads to
+    faster convergence during training. You may consider to initialise the recurrent weights using a uniform
+    distribution from 0 to 1.
 
     The original code is available at: https://github.com/Sunnydreamrain/IndRNN_Theano_Lasagne.
 

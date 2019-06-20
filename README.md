@@ -28,7 +28,8 @@ cntkx only works with `python>=3.6`
 | `sequence.stride` | strides across sequential axis  |
 | `sequence.join` | joins two sequence along their sequential axis  |
 | `sequence.window` | creates non-overlapping window along the sequence axis  |
-| `random.sample` | Samples a given probability distribution |
+| `random.sample` | Samples an unnormalised log probability distribution |
+| `random.sample_top_k` | Samples from the top_k of an unnormalised log probability distribution |
 | `batchmatmul` | Batch Matrix Multiplication on a static batch axis, similar to tf.matmul |
 
 | Layers | Description |
@@ -97,6 +98,29 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-06-21.***
+#### Added `cntkx.ops.random.sample_top_k`
+CNTK implementation of that allows sampling of the top_k unnormalised log-probabilities distribution.
+This is useful text (or sequence) generation where it is known that greedy decoding will cause
+text degeneration.
+
+For more details on this, please refer to [A curious case of neural text degeneration](https://arxiv.org/abs/1904.09751)
+
+
+Example:
+    
+    import cntk as C
+    import cntkx as Cx
+    
+    a = C.input_variable(5)
+    b = Cx.random.sample_top_k(a, k=3, num_classes=5)
+        
+    n = np.array([[1, 2, 3, 4, 5],] * 1000)
+
+    results = b.eval({a: n})
+    assert np.sum(results[:, :2]) == 0
+    assert np.sum(results[:, 2:]) == 1000
+
 ***2019-05-04.***
 #### Added `cntkx.layers.vFSMN` and `cntkx.layers.cFSMN`
 CNTK implementation of Bidirectional vectorised Feedforward Sequential Memory Network (vFSMN)

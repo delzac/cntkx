@@ -197,15 +197,12 @@ def reverse(x, name=''):
         start_token = C.Constant(0, shape=(hidden_dim,))
         a = C.sequence.input_variable(1, name='seq1')
 
-        b = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a)
-        c = UnfoldFrom(Recurrence(LSTM(hidden_dim), go_backwards=True))(start_token, a)
-
-        d = b + C.reconcile_dynamic_axes(c, b)
+        b = UnfoldFrom(Recurrence(LSTM(hidden_dim), go_backwards=True))(start_token, a)
 
         n = [np.random.random((10, hidden_dim)).astype(np.float32),]
 
         # This raise 'ValueError: It is not allowed to have multiple different stepping directions in the same loop'
-        d.eval({d.arguments[0]: n})
+        b.eval({b.arguments[0]: n})
 
 
     Example:
@@ -218,12 +215,10 @@ def reverse(x, name=''):
         a = C.sequence.input_variable(1, name='seq1')
         a_reversed = Cx.sequence.reverse(a)
 
-        b = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a)
-        c = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a_reversed)  # remove go_backwards=True
-        d = b + C.reconcile_dynamic_axes(c, b)
+        b = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a_reversed)  # remove go_backwards=True
 
         n = [np.random.random((10, hidden_dim)).astype(np.float32),]
-        d.eval({d.arguments[0]: n})  # this will run just fine
+        b.eval({b.arguments[0]: n})  # this will run just fine
 
     Arguments:
         x: input tensor

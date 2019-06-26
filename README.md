@@ -102,8 +102,8 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 ***2019-06-26.***
 #### Added `cntkx.ops.sequence.reverse`
 Allows the sequence items along the sequence axis to be reversed. This is useful when you want to create a 
-Bi-directional Auto-Regressive layer because using UnfoldFrom with both Recurrence() and 
-Recurrence(go_backwards=True) will result in a ValueError.
+Bi-directional Auto-Regressive layer because using UnfoldFrom does not work with Recurrence(go_backwards=True) and
+ will result in a ValueError.
 
 
 Example:
@@ -116,15 +116,12 @@ Example:
     start_token = C.Constant(0, shape=(hidden_dim,))
     a = C.sequence.input_variable(1, name='seq1')
     
-    b = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a)
-    c = UnfoldFrom(Recurrence(LSTM(hidden_dim), go_backwards=True))(start_token, a)
+    b = UnfoldFrom(Recurrence(LSTM(hidden_dim), go_backwards=True))(start_token, a)
     
-    d = b + C.reconcile_dynamic_axes(c, b)
-
     n = [np.random.random((10, hidden_dim)).astype(np.float32),]
     
     # This raise 'ValueError: It is not allowed to have multiple different stepping directions in the same loop'
-    d.eval({d.arguments[0]: n})
+    b.eval({b.arguments[0]: n})
     
 
 The workaround would be:
@@ -138,12 +135,10 @@ The workaround would be:
     a = C.sequence.input_variable(1, name='seq1')
     a_reversed = Cx.sequence.reverse(a)
     
-    b = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a)
-    c = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a_reversed)  # remove go_backwards=True
-    d = b + C.reconcile_dynamic_axes(c, b)
+    b = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a_reversed)  # remove go_backwards=True
 
     n = [np.random.random((10, hidden_dim)).astype(np.float32),]    
-    d.eval({d.arguments[0]: n})  # this will run just fine
+    b.eval({b.arguments[0]: n})  # this will run just fine
 
 
     

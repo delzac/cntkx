@@ -177,3 +177,65 @@ def window(x, width, new_axis=False, name=''):
         return y
 
     return inner(x)
+
+
+def reverse(x, name=''):
+    """ Reverses the items in sequence axis
+
+    This function is used to build a Bidirectional Auto-regressive rnn layer. Using UnfoldFrom with
+    Recurrence(x) and Recurrence(x, go_backwards=True) will result in 'ValueError: It is not allowed to
+    have multiple different stepping directions in the same loop'.
+
+    To workaround, instead of reversing in Recurrence(), we reverse the input sequence instead.
+
+    Example:
+        hidden_dim = 50
+        start_token = C.Constant(0, shape=(hidden_dim,))
+        a = C.sequence.input_variable(1, name='seq1')
+
+        b = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a)
+        c = UnfoldFrom(Recurrence(LSTM(hidden_dim), go_backwards=True))(start_token, a)
+
+        d = b + C.reconcile_dynamic_axes(c, b)
+
+        n = [np.random.random((10, hidden_dim)).astype(np.float32),]
+
+        # This raise 'ValueError: It is not allowed to have multiple different stepping directions in the same loop'
+        d.eval({d.arguments[0]: n})
+
+
+    Example:
+        hidden_dim = 50
+        start_token = C.Constant(0, shape=(hidden_dim,))
+        a = C.sequence.input_variable(1, name='seq1')
+        a_reversed = reverse(a)
+
+        b = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a)
+        c = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a_reversed)  # remove go_backwards=True
+        d = b + C.reconcile_dynamic_axes(c, b)
+
+        n = [np.random.random((10, hidden_dim)).astype(np.float32),]
+        d.eval({d.arguments[0]: n})  # this will run just fine
+
+    Arguments:
+        x: input tensor
+        name (str): name of function
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+        `x` with its sequence axis reversed
+
+    """
+
+    @C.BlockFunction('Sequence::Reverse', name)
+    def inner(a):
+        values, valid = C.sequence.unpack(a, padding_value=0).outputs
+        values_reversed = C.slice(values, 0, 0, 0, -1)
+        valid_reversed = C.slice(valid, 0, 0, 0, -1)
+
+        values_seq = C.to_sequence(values_reversed)
+        valid_seq = C.to_sequence(C.expand_dims(valid_reversed, axis=-1))
+        a_reversed = C.sequence.gather(values_seq, valid_seq)
+        return a_reversed
+
+    return inner(x)

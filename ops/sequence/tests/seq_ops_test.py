@@ -1,5 +1,5 @@
 import cntk as C
-from cntkx.ops.sequence import length, pad, stride, position, join, window
+from cntkx.ops.sequence import length, pad, stride, position, join, window, reverse
 import numpy as np
 
 
@@ -168,3 +168,19 @@ def test_window():
     desired = np.concatenate((n, m, o), axis=-1)[0, ::k]
 
     np.testing.assert_equal(result, desired)
+
+
+def test_reverse():
+    ndim = 3
+    a = C.sequence.input_variable(ndim)
+    r = reverse(a)
+
+    n = [np.arange(10 * ndim).reshape((10, ndim)).astype(np.float32),
+         np.arange(8 * ndim).reshape((8, ndim)).astype(np.float32),
+         np.arange(5 * ndim).reshape((5, ndim)).astype(np.float32), ]
+
+    results = r.eval({a: n})
+
+    for result, input_array in zip(results, n):
+        desired = input_array[::-1, ...]
+        np.testing.assert_equal(result, desired)

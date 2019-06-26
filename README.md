@@ -28,6 +28,7 @@ cntkx only works with `python>=3.6`
 | `sequence.stride` | strides across sequential axis  |
 | `sequence.join` | joins two sequence along their sequential axis  |
 | `sequence.window` | creates non-overlapping window along the sequence axis  |
+| `sequence.reverse` | reverses the items along the dynamic sequence axis  |
 | `random.sample` | Samples an unnormalised log probability distribution |
 | `random.sample_top_k` | Samples from the top_k of an unnormalised log probability distribution |
 | `batchmatmul` | Batch Matrix Multiplication on a static batch axis, similar to tf.matmul |
@@ -98,6 +99,46 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-06-26.***
+#### Added `cntkx.ops.sequence.reverse`
+Allows the sequence items along the sequence axis to be reversed. This is useful when you want to create a 
+Bi-directional Auto-Regressive layer because using UnfoldFrom with both Recurrence() and 
+Recurrence(go_backwards=True) will result in a ValueError.
+
+
+Example:
+
+    hidden_dim = 50
+    start_token = C.Constant(0, shape=(hidden_dim,))
+    a = C.sequence.input_variable(1, name='seq1')
+    
+    b = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a)
+    c = UnfoldFrom(Recurrence(LSTM(hidden_dim), go_backwards=True))(start_token, a)
+    
+    d = b + C.reconcile_dynamic_axes(c, b)
+
+    n = [np.random.random((10, hidden_dim)).astype(np.float32),]
+    
+    # This raise 'ValueError: It is not allowed to have multiple different stepping directions in the same loop'
+    d.eval({d.arguments[0]: n})
+    
+
+The workaround would be:
+
+    hidden_dim = 50
+    start_token = C.Constant(0, shape=(hidden_dim,))
+    a = C.sequence.input_variable(1, name='seq1')
+    a_reversed = reverse(a)
+    
+    b = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a)
+    c = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a_reversed)  # remove go_backwards=True
+    d = b + C.reconcile_dynamic_axes(c, b)
+
+    n = [np.random.random((10, hidden_dim)).astype(np.float32),]    
+    d.eval({d.arguments[0]: n})  # this will run just fine
+
+
+    
 ***2019-06-21.***
 #### Added `cntkx.ops.random.sample_top_k`
 CNTK implementation of that allows sampling of the top_k unnormalised log-probabilities distribution.

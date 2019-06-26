@@ -189,6 +189,10 @@ def reverse(x, name=''):
     To workaround, instead of reversing in Recurrence(), we reverse the input sequence instead.
 
     Example:
+        import cntk as C
+        import cntkx as Cx
+        from cntk.layers import Recurrence, UnfoldFrom, LSTM
+
         hidden_dim = 50
         start_token = C.Constant(0, shape=(hidden_dim,))
         a = C.sequence.input_variable(1, name='seq1')
@@ -205,10 +209,14 @@ def reverse(x, name=''):
 
 
     Example:
+        import cntk as C
+        import cntkx as Cx
+        from cntk.layers import Recurrence, UnfoldFrom, LSTM
+
         hidden_dim = 50
         start_token = C.Constant(0, shape=(hidden_dim,))
         a = C.sequence.input_variable(1, name='seq1')
-        a_reversed = reverse(a)
+        a_reversed = Cx.sequence.reverse(a)
 
         b = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a)
         c = UnfoldFrom(Recurrence(LSTM(hidden_dim)))(start_token, a_reversed)  # remove go_backwards=True

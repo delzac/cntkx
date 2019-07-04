@@ -242,3 +242,38 @@ def reverse(x, name=''):
         return a_reversed
 
     return inner(x)
+
+
+def reduce_mean(seq, name=''):
+    """ Computes the mean of the input sequence's elements across the sequence axis.
+
+    Examples:
+        import cntk as C
+        import cntkx as Cx
+
+        a = C.sequence.input_variable((3, 4))
+        b = Cx.sequence.reduce_mean(a)
+
+        n = [np.random.random((10, 3, 4)).astype(np.float32),]
+        results = b.eval({a: n})
+
+        for r, d in zip(results, n):
+            np.testing.assert_almost_equal(r, np.mean(d, axis=0))
+
+
+    Args:
+        seq: sequence input tensor
+        name (`str`, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+
+    """
+
+    @C.BlockFunction('Sequence::ReduceMean', name)
+    def inner(a):
+        b = C.sequence.reduce_sum(a)
+        c = b / Cx.sequence.length(a)
+        return c
+
+    return inner(seq)

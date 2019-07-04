@@ -29,6 +29,7 @@ cntkx only works with `python>=3.6`
 | `sequence.join` | joins two sequence along their sequential axis  |
 | `sequence.window` | creates non-overlapping window along the sequence axis  |
 | `sequence.reverse` | reverses the items along the dynamic sequence axis  |
+| `sequence.reduce_mean` | calculates the mean along the dynamic sequence axis  |
 | `random.sample` | Samples an unnormalised log probability distribution |
 | `random.sample_top_k` | Samples from the top_k of an unnormalised log probability distribution |
 | `batchmatmul` | Batch Matrix Multiplication on a static batch axis, similar to tf.matmul |
@@ -99,6 +100,11 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-07-04.***
+#### Added `cntkx.ops.sequence.reduce_mean`
+Calculates the mean along the dynamic sequential axis in CNTK.
+
+
 ***2019-06-26.***
 #### Added `cntkx.ops.sequence.reverse`
 Allows the sequence items along the sequence axis to be reversed. This is useful when you want to create a 

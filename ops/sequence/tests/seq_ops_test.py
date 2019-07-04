@@ -1,5 +1,5 @@
 import cntk as C
-from cntkx.ops.sequence import length, pad, stride, position, join, window, reverse
+from cntkx.ops.sequence import length, pad, stride, position, join, window, reverse, reduce_mean
 import numpy as np
 
 
@@ -184,3 +184,29 @@ def test_reverse():
     for result, input_array in zip(results, n):
         desired = input_array[::-1, ...]
         np.testing.assert_equal(result, desired)
+
+
+def test_reduce_mean():
+    a = C.sequence.input_variable(32)
+    b = reduce_mean(a)
+
+    n = [np.random.random((10, 32)).astype(np.float32),
+         np.random.random((10, 32)).astype(np.float32),
+         np.random.random((10, 32)).astype(np.float32),]
+
+    results = b.eval({a: n})
+
+    for r, d in zip(results, n):
+        np.testing.assert_almost_equal(r, np.mean(d, axis=0))
+
+    a = C.sequence.input_variable((3, 4))
+    b = reduce_mean(a)
+
+    n = [np.random.random((10, 3, 4)).astype(np.float32),
+         np.random.random((10, 3, 4)).astype(np.float32),
+         np.random.random((10, 3, 4)).astype(np.float32),]
+
+    results = b.eval({a: n})
+
+    for r, d in zip(results, n):
+        np.testing.assert_almost_equal(r, np.mean(d, axis=0))

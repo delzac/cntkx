@@ -202,7 +202,12 @@ def swish(x, name=''):
     It typically exhibits good performance in a variety of task in vision and nlp problems.
     Can be used as a drop-in replace for relu.
     """
-    return x * C.sigmoid(x, name=name)
+
+    @C.BlockFunction('Swish', name=name)
+    def inner(a):
+        return a * C.sigmoid(a)
+
+    return inner(x)
 
 
 @C.typemap
@@ -221,10 +226,14 @@ def hardmax(x, axis=-1, name=''):
     Returns:
         :class:`~cntk.ops.functions.Function`:
     """
-    return C.equal(C.reduce_max(x, axis=axis), x, name=name)
+
+    @C.BlockFunction('Hardmax', name=name)
+    def inner(a):
+        return C.equal(C.reduce_max(a, axis=axis), a)
+
+    return inner(x)
 
 
-@C.typemap
 def erf(x, name=''):
     """
     Computes the element-wise error function of `x`:
@@ -236,10 +245,6 @@ def erf(x, name=''):
     book can be found here 'http://people.math.sfu.ca/~cbm/aands/frameindex.htm'
 
     """
-    not_negative = C.greater_equal(x, 0)
-    sign = C.element_select(not_negative, not_negative, -1)
-
-    abs_x = C.abs(x)
 
     # constants
     a1 = 0.254829592
@@ -249,10 +254,19 @@ def erf(x, name=''):
     a5 = 1.061405429
     p = 0.3275911
 
-    # A&S formula 7.1.26
-    t = 1.0 / (1.0 + p * x)
-    y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * C.exp(-abs_x * abs_x)
-    return C.element_times(sign, y, name=name)
+    @C.BlockFunction('Erf', name=name)
+    def inner(a):
+        not_negative = C.greater_equal(a, 0)
+        sign = C.element_select(not_negative, not_negative, -1)
+
+        abs_x = C.abs(a)
+
+        # A&S formula 7.1.26
+        t = 1.0 / (1.0 + p * a)
+        y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * C.exp(-abs_x * abs_x)
+        return C.element_times(sign, y)
+
+    return inner(x)
 
 
 ##########################################################################

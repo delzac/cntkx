@@ -278,7 +278,9 @@ def gelu(x, name=''):
     For more detail please refer to 'Gaussian Error Linear Units (GELU)'
     by Hendrycks and Gimpel (https://arxiv.org/abs/1606.08415)
 
-    This activation is used in BERT and OpenAI GPT & GPT-2
+    This activation is used in BERT and OpenAI GPT & GPT-2.
+
+    Its computationally x2 times slower than relu with some negligible increase in memory footprint.
 
     Arguments:
         x: input_tensor
@@ -298,6 +300,8 @@ def gelu(x, name=''):
 def gelu_fast(x, name=''):
     """ This version is an less good approximation of gelu but it is x2 times faster on GPU and x3.8 faster on CPU.
     This implementation just as fast as relu on GPU but x2 slower on CPU.
+
+    Roughly the same memory footprint as relu.
 
     Arguments:
         x: input_tensor

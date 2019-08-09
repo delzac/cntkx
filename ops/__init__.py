@@ -219,9 +219,9 @@ def hardmax(x, axis=-1, name=''):
     If the provided ``axis`` is -1, it will be computed along the last axis. if None, it will be applied to all axes.
 
     Arguments:
-    x: input_tensor
-    axis (int or :class:`~cntk.axis.Axis`): axis along which the hardmax operation will be performed
-    name (str, optional): the name of the Function instance in the network
+        x: input_tensor
+        axis (int or :class:`~cntk.axis.Axis`): axis along which the hardmax operation will be performed
+        name (str, optional): the name of the Function instance in the network
 
     Returns:
         :class:`~cntk.ops.functions.Function`:
@@ -265,6 +265,51 @@ def erf(x, name=''):
         t = 1.0 / (1.0 + p * a)
         y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * C.exp(-abs_x * abs_x)
         return C.element_times(sign, y)
+
+    return inner(x)
+
+
+def gelu(x, name=''):
+    """ Gaussian Error Linear Unit (GELU), a high-performing neuralnetwork activation function.
+    The GELU nonlinearity is the expected transforma-tion of a stochastic regularizer which randomly
+    applies the identity or zero mapto a neuron’s input.  The GELU nonlinearity weights inputs by their
+    magnitude,rather than gates inputs by their sign as in ReLUs.
+
+    For more detail please refer to 'Gaussian Error Linear Units (GELU)'
+    by Hendrycks and Gimpel (https://arxiv.org/abs/1606.08415)
+
+    This activation is used in BERT and OpenAI GPT & GPT-2
+
+    Arguments:
+        x: input_tensor
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
+    @C.BlockFunction('Gelu', name=name)
+    def inner(a):
+        return 0.5 * a * (1 + erf(a / 1.41421356237))
+
+    return inner(x)
+
+
+def gelu_fast(x, name=''):
+    """ This version is an less good approximation of gelu but it is x3.8 times faster.
+    This implementation is still x2 slower than relu activation.
+
+    Arguments:
+        x: input_tensor
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
+    @C.BlockFunction('GeluFast', name=name)
+    def inner(a):
+        return a * C.sigmoid(1.702 * a)
 
     return inner(x)
 

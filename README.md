@@ -22,6 +22,8 @@ cntkx only works with `python>=3.6`
 | `swish` | Activation |
 | `hardmax` | Activation |
 | `erf` | Error function |
+| `gelu` | Gaussian Error Linear Unit function |
+| `gelu_fast` | fast approximation of Gaussian Error Linear Unit function |
 | `sequence.pad` | Pad at start or end of sequence axis |
 | `sequence.length` | length of sequence |
 | `sequence.position` | position of every sequence element |
@@ -100,6 +102,20 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-08-08.***
+#### Added `cntkx.ops.gelu` and `cntkx.ops.gelu_fast`
+Added two cntk implementation of `gelu` activation function. `gelu` activation is used in `BERT`
+and OpenAI's `GPT` and `GPT-2`.
+
+Gaussian Error Linear Unit (GELU), a high-performing neuralnetwork activation function.
+The GELU nonlinearity is the expected transforma-tion of a stochastic regularizer which randomly
+applies the identity or zero mapto a neuron’s input.  The GELU nonlinearity weights inputs by their
+magnitude,rather than gates inputs by their sign as in ReLUs.
+
+For more detail please refer to [Gaussian Error Linear Units (GELU)](https://arxiv.org/abs/1606.08415)
+by Hendrycks and Gimpel.
+
+
 ***2019-07-04.***
 #### Added `cntkx.ops.sequence.reduce_mean`
 Calculates the mean along the dynamic sequential axis in CNTK.

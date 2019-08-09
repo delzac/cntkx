@@ -1,5 +1,5 @@
 import cntk as C
-from cntkx.ops import cumsum, hardmax, erf, batchmatmul, scalar
+from cntkx.ops import cumsum, hardmax, erf, batchmatmul, scalar, gelu, gelu_fast
 import numpy as np
 from numpy.testing import assert_equal
 
@@ -69,6 +69,26 @@ def test_erf():
     results = b.eval({a: n})
 
     np.testing.assert_almost_equal(np.array(results), ans, decimal=6)
+
+
+def test_gelu():
+    a = C.input_variable(10)
+    b = gelu(a)
+
+    assert b.shape == (10,)
+
+    n = np.random.random((10, 10)).astype(np.float32)
+    b.eval({a: n})
+
+
+def test_gelu_fast():
+    a = C.input_variable(10)
+    b = gelu_fast(a)
+
+    assert b.shape == (10,)
+
+    n = np.random.random((10, 10)).astype(np.float32)
+    b.eval({a: n})
 
 
 def test_seq_batchmatmul0():

@@ -49,7 +49,7 @@ def length(x, name=''):
 
     @C.BlockFunction('Sequence::Length', name)
     def inner(a):
-        mask = C.sequence.unpack(Cx.scalar(a), padding_value=0).outputs[1]
+        mask = C.sequence.unpack(a, padding_value=0).outputs[1]
         return C.reduce_sum(mask, axis=0, name=name)
 
     return inner(x)

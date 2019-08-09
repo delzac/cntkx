@@ -296,8 +296,8 @@ def gelu(x, name=''):
 
 
 def gelu_fast(x, name=''):
-    """ This version is an less good approximation of gelu but it is x3.8 times faster.
-    This implementation is still x2 slower than relu activation.
+    """ This version is an less good approximation of gelu but it is x2 times faster on GPU and x3.8 faster on CPU.
+    This implementation just as fast as relu on GPU but x2 slower on CPU.
 
     Arguments:
         x: input_tensor

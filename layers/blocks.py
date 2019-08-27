@@ -76,8 +76,8 @@ def _RecurrentBlock(type, shape, cell_shape, activation, use_peepholes,
     Sct = Stabilizer(enable_self_stabilization=enable_self_stabilization, name='c_stabilizer')
     Sht = Stabilizer(enable_self_stabilization=enable_self_stabilization, name='P_stabilizer')
 
-    # DropConnecet
-    droppout = C.layers.Dropout(dropout_rate=dropout_rate, seed=seed, name='h_dropout')
+    # DropConnect
+    dropout = C.layers.Dropout(dropout_rate=dropout_rate, seed=seed, name='h_dropout')
 
     # define the model function itself
     # general interface for Recurrence():
@@ -97,7 +97,7 @@ def _RecurrentBlock(type, shape, cell_shape, activation, use_peepholes,
         # note: input does not get a stabilizer here, user is meant to do that outside
 
         # projected contribution from input(s), hidden, and bias
-        proj4 = b + times(x, W) + times(dhs, droppout(H))
+        proj4 = b + times(x, W) + times(dhs, dropout(H))
 
         it_proj  = slice (proj4, stack_axis, 0*stacked_dim, 1*stacked_dim)  # split along stack_axis
         bit_proj = slice (proj4, stack_axis, 1*stacked_dim, 2*stacked_dim)
@@ -321,3 +321,59 @@ def IndyLSTM(shape, activation=default_override_or(tanh),
     return _RecurrentBlock('IndyLSTM', shape, None, activation=activation, use_peepholes=False,
                            init=init, init_bias=init_bias, dropout_rate=0, seed=SentinelValueForAutoSelectRandomSeed,
                            enable_self_stabilization=enable_self_stabilization, name=name)
+
+
+def LSTM(shape, activation=default_override_or(tanh), weight_drop_rate=None,
+         ih_init=default_override_or(glorot_uniform()), ih_bias=default_override_or(0),
+         hh_init=default_override_or(glorot_uniform()), hh_bias=default_override_or(0),
+         name=''):
+    """ PyTorch style implementation of LSTM. Used for loading pytorch pretrained models. """
+    activation = get_default_override(LSTM, activation=activation)
+    ih_init = get_default_override(LSTM, ih_init=ih_init)
+    ih_bias = get_default_override(LSTM, ih_bias=ih_bias)
+    hh_init = get_default_override(LSTM, hh_init=hh_init)
+    hh_bias = get_default_override(LSTM, hh_bias=hh_bias)
+
+    stack_axis = - 1
+    shape = _as_tuple(shape)
+    cell_shape = shape
+    cell_shape_list = list(cell_shape)
+    stacked_dim = cell_shape_list[stack_axis]
+    cell_shape_list[stack_axis] = stacked_dim * 4
+    cell_shape_stacked = tuple(cell_shape_list)  # patched dims with stack_axis duplicated 4 times
+    cell_shape_list[stack_axis] = stacked_dim * 4
+    cell_shape_stacked_H = tuple(cell_shape_list)  # patched dims with stack_axis duplicated 4 times
+
+    init_bias = ih_bias + hh_bias
+    b  = Parameter(            cell_shape_stacked,   init=init_bias,    name='b')                    # bias
+    W  = Parameter(_INFERRED + cell_shape_stacked,   init=ih_init,      name='W')                    # input
+    H  = Parameter(shape     + cell_shape_stacked_H, init=hh_init,      name='H')                    # hidden-to-hidden
+
+    dropout = C.layers.Dropout(dropout_rate=weight_drop_rate, name='h_dropout')
+
+    @C.BlockFunction('PT::LSTM', name)
+    def lstm(dh, dc, x):
+        # projected contribution from input(s), hidden, and bias
+
+        dropped_H = dropout(H) if weight_drop_rate is not None else H
+        proj4 = b + times(x, W) + times(dh, dropped_H)
+
+        # slicing layout different from cntk's implementation
+        it_proj  = slice(proj4, stack_axis, 0 * stacked_dim, 1 * stacked_dim)  # split along stack_axis
+        ft_proj  = slice(proj4, stack_axis, 1 * stacked_dim, 2 * stacked_dim)
+        bit_proj = slice(proj4, stack_axis, 2 * stacked_dim, 3 * stacked_dim)  # g gate
+        ot_proj  = slice(proj4, stack_axis, 3 * stacked_dim, 4 * stacked_dim)
+
+        it = sigmoid(it_proj)                        # input gate(t)
+        bit = it * activation(bit_proj)              # applied to tanh of input network
+
+        ft = sigmoid(ft_proj)                        # forget-me-not gate(t)
+        bft = ft * dc                                # applied to cell(t-1)
+
+        ct = bft + bit                               # c(t) is sum of both
+
+        ot = sigmoid(ot_proj)                        # output gate(t)
+        ht = ot * activation(ct)                     # applied to tanh(cell(t))
+        return ht, ct
+
+    return lstm

@@ -5,7 +5,7 @@ import cntkx as Cx
 from cntkx.layers.blocks import _INFERRED
 from cntk.default_options import default_override_or, get_default_override
 from cntk.layers.blocks import identity, _initializer_for
-from cntk.layers import Embedding, Dropout
+from cntk.layers import Dropout
 from cntk.layers import MaxPooling, LayerNormalization, AveragePooling
 from cntk.internal import _as_tuple
 from cntk.variables import Record
@@ -171,6 +171,108 @@ def Dense(shape, activation=default_override_or(identity), init=default_override
     return dense
 
 
+def Embedding(shape=None, init=default_override_or(C.glorot_uniform()), weights=None, enable_weight_tying=False, name=''):
+    '''
+    Embedding(shape=None, init=glorot_uniform(), weights=None, enable_weight_tying=False, name='')
+
+    Layer factory function to create a embedding layer.
+
+    An embedding is conceptually a lookup table. For every input token (e.g. a word or any category label), the corresponding
+    entry in the lookup table is returned.
+
+    In CNTK, discrete items such as words are represented as one-hot vectors.
+    The table lookup is realized as a matrix product, with a matrix
+    whose rows are the embedding vectors.
+    Note that multiplying a matrix from the left with a one-hot vector is the same as copying
+    out the row for which the input vector is 1.
+    CNTK has special optimizations to make this operation as efficient as an actual table lookup if the input is sparse.
+
+    The lookup table in this layer is learnable,
+    unless a user-specified one is supplied through the ``weights`` parameter.
+    For example, to use an existing embedding table from a file in numpy format, use this::
+
+      Embedding(weights=np.load('PATH.npy'))
+
+    To initialize a learnable lookup table with a given numpy array that is to be used as
+    the initial value, pass that array to the ``init`` parameter (not ``weights``).
+
+    An ``Embedding`` instance owns its weight parameter tensor `E`, and exposes it as an attribute ``.E``.
+
+    Example:
+     >>> # learnable embedding
+     >>> f = Embedding(5)
+     >>> x = C.input_variable(3)
+     >>> e = f(x)
+     >>> e.shape
+         (5,)
+     >>> f.E.shape
+         (3, 5)
+
+     >>> # user-supplied embedding
+     >>> f = Embedding(weights=[[.5, .3, .1, .4, .2], [.7, .6, .3, .2, .9]])
+     >>> f.E.value
+         array([[ 0.5,  0.3,  0.1,  0.4,  0.2],
+                [ 0.7,  0.6,  0.3,  0.2,  0.9]], dtype=float32)
+     >>> x = C.input_variable(2, is_sparse=True)
+     >>> e = f(x)
+     >>> e.shape
+         (5,)
+     >>> e(C.Value.one_hot([[1], [0], [0], [1]], num_classes=2))
+     array([[ 0.7,  0.6,  0.3,  0.2,  0.9],
+            [ 0.5,  0.3,  0.1,  0.4,  0.2],
+            [ 0.5,  0.3,  0.1,  0.4,  0.2],
+            [ 0.7,  0.6,  0.3,  0.2,  0.9]], dtype=float32)
+
+    Args:
+     shape (`int` or `tuple` of `ints`): vector or tensor dimension of the output of this layer
+     init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): (learnable embedding only) initial value of weights `E`
+     weights (NumPy array, mutually exclusive with ``init``, defuats to `None`): (user-supplied embedding only) the lookup table.
+      The matrix rows are the embedding vectors, ``weights[i,:]`` being the embedding that corresponds to input category `i`.
+     enable_weight_tying (bool): whether to produce both an input and output embedding for weight tying.
+     name (str, defaults to ''): the name of the function instance in the network
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the embedding operation to it
+    '''
+
+    if not C.is_default_override(init) and weights is not None:
+        raise ValueError('Embedding: init and weights options are mutually exclusive')
+
+    # parameters bound to this Function:
+    # no weights given: learn the embedding
+    if weights is None:
+        if shape is None:
+            raise ValueError('Embedding: output shape must be specified')
+        init = get_default_override(Embedding, init=init)
+        shape = _as_tuple(shape)
+        weight_shape = _INFERRED + shape
+        E = C.Parameter(weight_shape, init=init, name='E')
+    # weights given: use them as constant
+    else:
+        import numpy as np
+        weights = np.array(weights)
+        weight_shape = np.shape(weights)
+        if shape is not None:  # user may give shape, then it must match
+            raise ValueError('Embedding: output shape must not be specified when weights are given')
+        E = C.Constant(weights, name='E')
+
+    # expression
+    @C.BlockFunction('Embedding', name)
+    def embed(x):
+        return C.times(x, E)
+
+    # expression
+    @C.BlockFunction('TransposeEmbedding', name)
+    def transpose_embed(x):
+        return C.times_transpose(x, E)
+
+    if enable_weight_tying:
+        return embed, transpose_embed
+
+    return embed
+
+
 def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=False,
          variational_dropout_rate_input=None, variational_dropout_rate_output=None, name=''):
     """
@@ -250,8 +352,8 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
         # Pooling
         zf = C.splice(z, f)
         c = Cx.layers.Recurrence(f_pool,
-                                 variational_dropout_rate_input=variational_dropout_rate_input,
-                                 variational_dropout_rate_output=variational_dropout_rate_output)(zf)
+                                 dropout_rate_input=variational_dropout_rate_input,
+                                 dropout_rate_output=variational_dropout_rate_output)(zf)
         h = o * c  # o pool
 
         if return_full_state:

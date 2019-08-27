@@ -20,7 +20,7 @@ def test_recurrence():
     # input variational dropout - total dropout
     # -------------------------------------------------------------------------
     a = C.sequence.input_variable(10)
-    b = Recurrence(C.plus, variational_dropout_rate_input=.9999999999)(a)
+    b = Recurrence(C.plus, dropout_rate_input=.9999999999)(a)
 
     n = np.arange(100).reshape((1, 10, 10)).astype(np.float32)
     __, result = b.forward({a: n}, [b.output], set([b.output]))
@@ -33,7 +33,7 @@ def test_recurrence():
     # output variational dropout - total dropout
     # -------------------------------------------------------------------------
     a = C.sequence.input_variable(10)
-    b = Recurrence(C.plus, variational_dropout_rate_output=.9999999999)(a)
+    b = Recurrence(C.plus, dropout_rate_output=.9999999999)(a)
 
     n = np.arange(100).reshape((1, 10, 10)).astype(np.float32)
     __, result = b.forward({a: n}, [b.output], set([b.output]))
@@ -46,7 +46,7 @@ def test_recurrence():
     # input variational dropout - Zero dropout
     # -------------------------------------------------------------------------
     a = C.sequence.input_variable(10)
-    b = Recurrence(C.plus, variational_dropout_rate_input=.000000001)(a)
+    b = Recurrence(C.plus, dropout_rate_input=.000000001)(a)
 
     n = np.arange(100).reshape((1, 10, 10)).astype(np.float32)
     __, result = b.forward({a: n}, [b.output], set([b.output]))
@@ -59,7 +59,7 @@ def test_recurrence():
     # output variational dropout - Zero dropout
     # -------------------------------------------------------------------------
     a = C.sequence.input_variable(10)
-    b = Recurrence(C.plus, variational_dropout_rate_output=.000000001)(a)
+    b = Recurrence(C.plus, dropout_rate_output=.000000001)(a)
 
     n = np.arange(100).reshape((1, 10, 10)).astype(np.float32)
     __, result = b.forward({a: n}, [b.output], set([b.output]))
@@ -72,7 +72,7 @@ def test_recurrence():
     # output variational dropout - half dropout
     # -------------------------------------------------------------------------
     a = C.sequence.input_variable(10)
-    b = Recurrence(C.plus, variational_dropout_rate_output=.5, seed=12)(a)
+    b = Recurrence(C.plus, dropout_rate_output=.5, seed=12)(a)
 
     n = np.arange(100).reshape((1, 10, 10)).astype(np.float32)
     __, result = b.forward({a: n}, [b.output], set([b.output]))

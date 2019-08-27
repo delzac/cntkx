@@ -1,8 +1,8 @@
 import cntk as C
 import cntkx as Cx
 import numpy as np
-from cntk.layers import LayerNormalization, ResNetBlock, Recurrence
-from cntkx.layers import PreTrainedBertEmbeddings, PositionwiseFeedForward, Dense, PretrainedBertPooler
+from cntk.layers import LayerNormalization, ResNetBlock
+from cntkx.layers import PreTrainedBertEmbeddings, PositionwiseFeedForward, Dense, PretrainedBertPooler, Recurrence
 from cntk.default_options import default_override_or
 from cntk.layers.blocks import _inject_name
 

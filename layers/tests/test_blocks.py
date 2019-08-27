@@ -9,8 +9,8 @@ def test_weight_dropped_lstm():
     variationaldrop_rate = 0.1
     a = C.sequence.input_variable(10)
     b = Recurrence(WeightDroppedLSTM(20, dropconnect_rate),
-                   variational_dropout_rate_input=variationaldrop_rate,
-                   variational_dropout_rate_output=variationaldrop_rate)(a)
+                   dropout_rate_input=variationaldrop_rate,
+                   dropout_rate_output=variationaldrop_rate)(a)
 
     assert b.shape == (20, )
 

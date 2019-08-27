@@ -14,8 +14,8 @@ from cntk.layers.sequence import _santize_step_function, RecurrenceFrom
 
 # TODO: Include RecurrenceFrom in here
 def Recurrence(step_function, go_backwards=default_override_or(False), initial_state=default_override_or(0),
-               return_full_state=False, variational_dropout_rate_input=None,
-               variational_dropout_rate_output=None, seed=SentinelValueForAutoSelectRandomSeed, name=''):
+               return_full_state=False, dropout_rate_input=None,
+               dropout_rate_output=None, seed=SentinelValueForAutoSelectRandomSeed, name=''):
     '''
     Recurrence(step_function, go_backwards=False, initial_state=0, return_full_state=False, name='')
 
@@ -109,8 +109,8 @@ def Recurrence(step_function, go_backwards=default_override_or(False), initial_s
      return_full_state (bool, defaults to ``False``): if ``True`` and the step function has more than one
       state variable, then the layer returns a all state variables (a tuple of sequences);
       whereas if not given or ``False``, only the first state variable is returned to the caller.
-     variational_dropout_rate_input (float): dropout for input
-     variational_dropout_rate_output (float): dropout for output
+     dropout_rate_input (float): dropout for input
+     dropout_rate_output (float): dropout for output
      seed (int): seed for randomisation
      name (str, optional): the name of the Function instance in the network
 
@@ -131,12 +131,12 @@ def Recurrence(step_function, go_backwards=default_override_or(False), initial_s
     step_function = _santize_step_function(step_function)
 
     dropout_input = None
-    if variational_dropout_rate_input:
-        dropout_input = VariationalDropout(dropout_rate=variational_dropout_rate_input, seed=seed, name='variational_dropout_input')
+    if dropout_rate_input:
+        dropout_input = VariationalDropout(dropout_rate=dropout_rate_input, seed=seed, name='variational_dropout_input')
 
     dropout_output = None
-    if variational_dropout_rate_output:
-        dropout_output = VariationalDropout(dropout_rate=variational_dropout_rate_output, seed=seed, name='variational_dropout_output')
+    if dropout_rate_output:
+        dropout_output = VariationalDropout(dropout_rate=dropout_rate_output, seed=seed, name='variational_dropout_output')
 
     # get signature of step function
     #*prev_state_args, _ = step_function.signature  # Python 3
@@ -164,6 +164,22 @@ def Recurrence(step_function, go_backwards=default_override_or(False), initial_s
         return dropped_y
 
     return _inject_name(recurrence, name)
+
+
+def BiRecurrence(step_function: C.Function, initial_state=0, dropout_rate_input=None, dropout_rate_output=None,
+                 seed=SentinelValueForAutoSelectRandomSeed, name=''):
+    """ Convenience wrapper to create a bidirectional rnn """
+    fxn1 = step_function
+    fxn2 = step_function.clone(C.CloneMethod.clone, {})
+
+    forward = Recurrence(fxn1, dropout_rate_input=dropout_rate_input, dropout_rate_output=dropout_rate_output, initial_state=initial_state, seed=seed)
+    backward = Recurrence(fxn2, dropout_rate_input=dropout_rate_input, dropout_rate_output=dropout_rate_output, initial_state=initial_state, seed=seed, go_backwards=True)
+
+    @C.Function
+    def inner(x):
+        return C.splice(forward(x), backward(x), axis=-1)
+
+    return inner
 
 
 def PyramidalBiRecurrence(step_fxn_f, step_fxn_b, width, initial_state_f=0, initial_state_b=0,
@@ -216,12 +232,12 @@ def PyramidalBiRecurrence(step_fxn_f, step_fxn_b, width, initial_state_f=0, init
 
     """
     forward = Recurrence(step_fxn_f, initial_state=initial_state_f, go_backwards=False,
-                         return_full_state=False, variational_dropout_rate_input=variational_dropout_rate_input,
-                         variational_dropout_rate_output=variational_dropout_rate_output, seed=seed, name='Pyramidal_Forward')
+                         return_full_state=False, dropout_rate_input=variational_dropout_rate_input,
+                         dropout_rate_output=variational_dropout_rate_output, seed=seed, name='Pyramidal_Forward')
 
     backward = Recurrence(step_fxn_b, initial_state=initial_state_b, go_backwards=True,
-                          return_full_state=False, variational_dropout_rate_input=variational_dropout_rate_input,
-                          variational_dropout_rate_output=variational_dropout_rate_output, seed=seed, name='Pyramidal_Backward')
+                          return_full_state=False, dropout_rate_input=variational_dropout_rate_input,
+                          dropout_rate_output=variational_dropout_rate_output, seed=seed, name='Pyramidal_Backward')
 
     @C.Function
     def inner(x):

@@ -327,7 +327,15 @@ def LSTM(shape, activation=default_override_or(tanh), weight_drop_rate=None,
          ih_init=default_override_or(glorot_uniform()), ih_bias=default_override_or(0),
          hh_init=default_override_or(glorot_uniform()), hh_bias=default_override_or(0),
          name=''):
-    """ PyTorch style implementation of LSTM. Used for loading pytorch pretrained models. """
+    """ PyTorch style implementation of LSTM. Used for loading pytorch pretrained models.
+
+    This difference between this implementation and cntk's one is that the slicing of
+    the recurrent weights are different.
+
+    pytorch is ifgo but cntk is igfo. And pytorch has 2 biases, but cntk only has one. In this implementation,
+    i kept the biases to one to speed it up a little more.
+
+    """
     activation = get_default_override(LSTM, activation=activation)
     ih_init = get_default_override(LSTM, ih_init=ih_init)
     ih_bias = get_default_override(LSTM, ih_bias=ih_bias)
@@ -344,12 +352,12 @@ def LSTM(shape, activation=default_override_or(tanh), weight_drop_rate=None,
     cell_shape_list[stack_axis] = stacked_dim * 4
     cell_shape_stacked_H = tuple(cell_shape_list)  # patched dims with stack_axis duplicated 4 times
 
-    init_bias = ih_bias + hh_bias
+    init_bias = ih_bias + hh_bias  # combine both biases in pytorch into one
     b  = Parameter(            cell_shape_stacked,   init=init_bias,    name='b')                    # bias
     W  = Parameter(_INFERRED + cell_shape_stacked,   init=ih_init,      name='W')                    # input
     H  = Parameter(shape     + cell_shape_stacked_H, init=hh_init,      name='H')                    # hidden-to-hidden
 
-    dropout = C.layers.Dropout(dropout_rate=weight_drop_rate, name='h_dropout')
+    dropout = C.layers.Dropout(dropout_rate=weight_drop_rate, name='h_dropout') if weight_drop_rate is not None else None
 
     @C.BlockFunction('PT::LSTM', name)
     def lstm(dh, dc, x):

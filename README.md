@@ -79,6 +79,9 @@ cntkx only works with `python>=3.6`
 | Pre-trained models | Description |
 | --- | ---|
 | `Bert` | Bidirectional Encoder Representations from Transformers |
+| [fwd_wt103.hdf5](https://1drv.ms/u/s!AjJ4XyC3prp8mItNxiawGK4gD8iMhA?e=wh7PLB) | The weight parameters of the fastai's pytorch model. To be used to initialise `PretrainedWikitext103LanguageModel` |
+| [fwd_wt103.cntk](https://1drv.ms/u/s!AjJ4XyC3prp8mItPBdfmDYr9QP7J4w?e=k1BXlW) | The converted cntk model of fastai's pytorch model. To be used with `C.load_model` |
+| [fwd_wt103.onnx](https://1drv.ms/u/s!AjJ4XyC3prp8mItO70T_q8HOPwa6aQ?e=h2Fiv5) | The converted ONNX model of fastai's pytorch model. |
 
 
 | Learners | Description |
@@ -102,6 +105,35 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-08-29.***
+#### Added `PretrainedWikitext103LanguageModel`
+CNTK implementation of Fast AI's Universal  Language  ModelFine-tuning (ULMFiT) English model has been added.
+This language model was trained on Wikitext-103 and can be used as a base model for any downstream language task.
+
+It is also much more efficient to run compare to BERT and other Transformer language models.
+
+For more details, you can refer to the original paper [here](https://arxiv.org/abs/1801.06146)
+
+Example:
+
+    vocab_size = 238462
+    converted_hdf5_model_file_path = 'PATH/fwd_wt103.hdf5'  # this is not the original pytorch model
+    lm = PretrainedWikitext103LanguageModel(converted_hdf5_model_file_path)
+
+    a = C.sequence.input_variable(vocab_size)
+    prediction = lm(a)  # next-word-prediction
+    features = prediction.features  # features of tokens
+
+    assert prediction.shape == (vocab_size, )
+    assert features.shape == (400, )
+
+| Model | Description |
+| --- | ---|
+| [fwd_wt103.hdf5](https://1drv.ms/u/s!AjJ4XyC3prp8mItNxiawGK4gD8iMhA?e=wh7PLB) | The weight parameters of the fastai's pytorch model. To be used to initialise `PretrainedWikitext103LanguageModel` |
+| [fwd_wt103.cntk](https://1drv.ms/u/s!AjJ4XyC3prp8mItPBdfmDYr9QP7J4w?e=k1BXlW) | The converted cntk model of fastai's pytorch model. To be used with `C.load_model` |
+| [fwd_wt103.onnx](https://1drv.ms/u/s!AjJ4XyC3prp8mItO70T_q8HOPwa6aQ?e=h2Fiv5) | The converted ONNX model of fastai's pytorch model. |
+
+
 ***2019-08-08.***
 #### Added `cntkx.ops.gelu` and `cntkx.ops.gelu_fast`
 Added two cntk implementation of `gelu` activation function. `gelu` activation is used in `BERT`

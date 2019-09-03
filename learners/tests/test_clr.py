@@ -12,12 +12,13 @@ def test_clr():
     a = C.input_variable(10)
     model = C.layers.Dense(10)(a)
     sgd = C.sgd(model.parameters, 0.01)
-    clr = CyclicalLearningRate([sgd],
-                               base_lrs=base_lr,
-                               max_lrs=max_lr,
+    clr = CyclicalLearningRate(sgd,
+                               base_lr=base_lr,
+                               max_lr=max_lr,
                                minibatch_size=minibatch_size,
-                               step_size=step_size)
+                               ramp_up_step_size=2000,
+                               ramp_down_step_size=4000,)
     lr_schedule = clr.get_lr_schedule()
 
-    plt.scatter(range(lr_schedule.shape[0]), lr_schedule[:, 0], s=1)
+    plt.scatter(range(lr_schedule.shape[0]), lr_schedule, s=1)
     plt.show()

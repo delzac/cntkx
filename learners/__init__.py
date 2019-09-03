@@ -1,6 +1,7 @@
 import cntk as C
 import math
 import numpy as np
+from typing import List
 
 
 class CyclicalLearningRate(object):
@@ -41,11 +42,11 @@ class CyclicalLearningRate(object):
 
 
     Args:
-        parameter_learners (list): list of cntk learner
-        base_lrs (float or list): Initial learning rate which is the
+        parameter_learner (learner): list of cntk learner
+        base_lr (float or list): Initial learning rate which is the
             lower boundary in the cycle for eachparam groups.
             Default: 0.001
-        max_lrs (float or list): Upper boundaries in the cycle for
+        max_lr (float or list): Upper boundaries in the cycle for
             each parameter group. Functionally,
             it defines the cycle amplitude (max_lr - base_lr).
             The lr at any cycle is the sum of base_lr
@@ -70,7 +71,8 @@ class CyclicalLearningRate(object):
             Default: None
         scale_by (str): scale by either number of training iterations or training cycles.
             Only used if custom scaling policy scale_fn is defined.
-        pretraining (bool): If True, loss & learn rate will be recorded. get loss lr history functions can then be used.
+        record_history (bool): If True, loss & learn rate will be recorded. get loss lr
+            history functions can then be used.
         last_batch_iteration (int): The index of the last batch. Default: -1
     Example:
      >>> model = C.layers.Dense(10)(C.input_variable(10))
@@ -83,9 +85,9 @@ class CyclicalLearningRate(object):
      ...         clr.batch_step()  # must be called once for every training iteration/update
     """
 
-    def __init__(self, parameter_learners, base_lrs=1e-3, max_lrs=6e-3, minibatch_size=None,
-                 step_size=2000, lr_policy='triangular2', gamma=0.99994,
-                 scale_fn=None, scale_by="cycle", pretraining=False, last_batch_iteration=-1):
+    def __init__(self, parameter_learner, base_lr=1e-3, max_lr=6e-3, minibatch_size=None,
+                 ramp_up_step_size=2000, ramp_down_step_size: int = None, lr_policy='triangular2', gamma=0.99994,
+                 scale_fn=None, scale_by="cycle", record_history=False, last_batch_iteration=-1):
 
         if lr_policy not in ['triangular', 'triangular2', 'exp_range'] and scale_fn is None:
             raise ValueError('lr_policy is invalid and scale_fn is None')
@@ -93,18 +95,18 @@ class CyclicalLearningRate(object):
         if scale_by not in ['iteration', 'cycle']:
             raise ValueError("Can only scale by iteration or cycle")
 
-        self.parameter_learners = parameter_learners if isinstance(parameter_learners, list) else [parameter_learners]
-        self.base_lrs = base_lrs if isinstance(base_lrs, list) else [base_lrs] * len(self.parameter_learners)
-        self.max_lrs = max_lrs if isinstance(max_lrs, list) else [max_lrs] * len(self.parameter_learners)
+        self.parameter_learner = parameter_learner
+        self.base_lr = base_lr
+        self.max_lr = max_lr
 
-        assert len(self.base_lrs) == len(self.max_lrs) == len(self.parameter_learners), "number of learners/base_lrs/max_lrs must be equal"
-
-        self.step_size = step_size
+        self.ramp_up_step_size = ramp_up_step_size
+        self.ramp_down_step_size = ramp_down_step_size or ramp_up_step_size
+        self.cycle_size = self.ramp_up_step_size + self.ramp_down_step_size
         self.minibatch_size = minibatch_size
 
         self.lr_policy = lr_policy
         self.gamma = gamma
-        self.pretraining = pretraining
+        self.record_history = record_history
 
         if scale_fn is None:
             if self.lr_policy == 'triangular':
@@ -121,18 +123,21 @@ class CyclicalLearningRate(object):
             self.scale_by = scale_by
 
         self.loss = []
-        self.lrs = []
+        self.lrs: List[float] = []  # [(learn1_lr, ), (learner1_lr, ), ... ]
+        self.current_lr = 0
         self.last_batch_iteration = last_batch_iteration
         self.batch_step()
-        self.lrs = []
 
-    def _triangular_scale_fn(self, x):
+    def _triangular_scale_fn(self, x) -> float:
         return 1.
 
-    def _triangular2_scale_fn(self, x):
+    def _triangular2_scale_fn(self, x) -> float:
         return 1 / (2. ** (x - 1))
 
-    def _exp_range_scale_fn(self, x):
+    def slanted_triangle_scale_fn(self, x) -> float:
+        return
+
+    def _exp_range_scale_fn(self, x) -> float:
         return self.gamma ** x
 
     def batch_step(self, previous_minibatch_loss=None):
@@ -142,67 +147,80 @@ class CyclicalLearningRate(object):
         """
 
         self.last_batch_iteration += 1
-        lrs = self.get_lr()
-
+        lr = self.get_lr()
+        self.current_lr = lr
+        
         # loss and learn rate gets recorded in pre-training mode
-        if self.pretraining and previous_minibatch_loss:
+        if self.record_history and previous_minibatch_loss:
             self.loss.append(previous_minibatch_loss)
-            self.lrs.append(lrs)
+            self.lrs.append(lr)
 
-        for learner, lr in zip(self.parameter_learners, lrs):
-            learner.reset_learning_rate(C.learning_parameter_schedule(lr, minibatch_size=self.minibatch_size))
-
+        self.parameter_learner.reset_learning_rate(C.learning_parameter_schedule(lr, minibatch_size=self.minibatch_size))
         return None
 
-    def get_lr(self):
+    def get_lr(self) -> float:
         """ Get learning rate based on last_batch_iteration count """
-        step_size = float(self.step_size)
-        cycle = math.floor(1 + self.last_batch_iteration / (2 * step_size))  # Cycle number (int)
-        x = abs(self.last_batch_iteration / step_size - 2 * cycle + 1)  # vary between the range of 0 and 1
+        # Cycle number
+        cycle_num: int = math.floor(1 + self.last_batch_iteration / self.cycle_size)
 
-        lrs = []
-        param_lrs = zip(self.base_lrs, self.max_lrs)
-        for base_lr, max_lr in param_lrs:
-            base_height = (max_lr - base_lr) * max(0, (1 - x))
-            xx = cycle if self.scale_by == "cycle" else self.last_batch_iteration
-            lr = base_lr + base_height * self.scale_fn(xx)
-            lrs.append(lr)
+        # number of batch steps made since last complete cycle
+        iteration_since_last_cycle = self.last_batch_iteration % self.cycle_size
 
-        return tuple(lrs)
+        # vary between the range of 0 and 1
+        # start -> mid -> end
+        # 1     ->  0  ->  1
+        # proportion_of_step_completed = abs(self.last_batch_iteration / step_size - 2 * cycle_num + 1)
 
-    def get_lr_schedule(self, number_of_cycles=4):
+        # ramping up or down
+        is_ramp_up = True if iteration_since_last_cycle <= self.ramp_up_step_size else False
+
+        num_batch_steps_in_ramp = iteration_since_last_cycle
+        if is_ramp_up:
+            base_height = (self.max_lr - self.base_lr) * (num_batch_steps_in_ramp / self.ramp_up_step_size)
+        else:  # ramp_down
+            num_batch_steps_in_ramp = iteration_since_last_cycle - self.ramp_up_step_size
+            base_height = (self.max_lr - self.base_lr) * (1 - num_batch_steps_in_ramp / self.ramp_down_step_size)
+
+        # base_height = (self.max_lr - self.base_lr) * max(0., (1 - proportion_of_step_completed))
+        xx = cycle_num if self.scale_by == "cycle" else self.last_batch_iteration
+        lr = self.base_lr + base_height * self.scale_fn(xx)
+        return lr
+
+    def get_lr_schedule(self, number_of_cycles=4) -> np.ndarray:
         """ returns how the learn rate schedule will be like. Useful to check if your
         custom learning policy is working as intended.
 
         The returned lr_schedule can be visualised in the following:
             import matplotlib.pyplot as plt
 
-            plt.scatter(range(lr_schedule.shape[0]), lr_schedule[:, 0], s=1)  # for first parameter_learner
+            plt.scatter(range(lr_schedule.shape[0]), lr_schedule, s=1)
             plt.show()
 
-            plt.scatter(range(lr_schedule.shape[0]), lr_schedule[:, 1], s=1)  # for second parameter_learner
-            plt.show()
+        Arguments:
+            number_of_cycles (int):
+
+        Returns:
+            np.ndarray 1-d
 
         """
         store_last_iteration = self.last_batch_iteration
         self.last_batch_iteration = 0
 
         lr_schedule = []
-        for i in range(number_of_cycles * self.step_size * 2):
+        for i in range(number_of_cycles * self.cycle_size):
             lr_schedule.append(self.get_lr())
             self.last_batch_iteration += 1
 
         self.last_batch_iteration = store_last_iteration
         lr_schedule = np.array(lr_schedule)
-        assert lr_schedule.ndim == 2
-
+        assert lr_schedule.ndim == 1
         return lr_schedule
 
-    def get_loss_lr_history(self):
-        assert self.pretraining, "Cannot be used outside of pre-training as loss is not captured"
+    def get_loss_lr_history(self) -> np.ndarray:
+        assert self.record_history, "Cannot be used outside of pre-training as loss is not captured"
         return np.array([(loss, *lrs) for loss, lrs in zip(self.loss, self.lrs)])
 
-    def get_averaged_loss_lr_history(self, window=100):
+    def get_averaged_loss_lr_history(self, window=100) -> np.ndarray:
         """ Average loss and learn rate value within window size
 
         Any remainder outside of window size will not be included in the average returned.
@@ -219,7 +237,7 @@ class CyclicalLearningRate(object):
         Max_lr is the largest lr before loss becomes unstable.
 
         """
-        assert self.pretraining, "Cannot be used outside of pre-training as loss is not captured"
+        assert self.record_history, "Cannot be used outside of pre-training as loss is not captured"
         assert window > 0, "window size cannot be zero or smaller"
 
         history = self.get_loss_lr_history()

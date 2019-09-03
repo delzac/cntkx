@@ -53,9 +53,12 @@ class CyclicalLearningRate(object):
             and some scaling of the amplitude; therefore
             max_lr may not actually be reached depending on
             scaling function. Default: 0.006
-        step_size (int): Number of training iterations per
-            half cycle. Authors suggest setting step_size
+        ramp_up_step_size (int): Number of training iterations in the
+            lr ramp up phase. Authors suggest setting step_size
             2-8 x training iterations in epoch. Default: 2000
+        ramp_down_step_size (int): Number of training iterations in the
+            lr ramp down phase. If not set, it will take the value of
+            ramp_up_step_size making the lr curve symmetric.
         minibatch_size (int): Number of samples in one minibatch
         lr_policy (str): One of {triangular, triangular2, exp_range}.
             Values correspond to policies detailed above.
@@ -86,14 +89,17 @@ class CyclicalLearningRate(object):
     """
 
     def __init__(self, parameter_learner, base_lr=1e-3, max_lr=6e-3, minibatch_size=None,
-                 ramp_up_step_size=2000, ramp_down_step_size: int = None, lr_policy='triangular2', gamma=0.99994,
-                 scale_fn=None, scale_by="cycle", record_history=False, last_batch_iteration=-1):
+                 ramp_up_step_size=2000, ramp_down_step_size: int = None, lr_policy: str = 'triangular2', gamma=0.99994,
+                 scale_fn=None, scale_by: str = None, record_history: bool = False, last_batch_iteration: int = -1):
 
         if lr_policy not in ['triangular', 'triangular2', 'exp_range'] and scale_fn is None:
             raise ValueError('lr_policy is invalid and scale_fn is None')
 
-        if scale_by not in ['iteration', 'cycle']:
+        if scale_by is not None and scale_by not in ['iteration', 'cycle']:
             raise ValueError("Can only scale by iteration or cycle")
+
+        if scale_by is not None and scale_fn is None:
+            raise ValueError('scale_by can only be used when custom scale function is used')
 
         self.parameter_learner = parameter_learner
         self.base_lr = base_lr
@@ -134,9 +140,6 @@ class CyclicalLearningRate(object):
     def _triangular2_scale_fn(self, x) -> float:
         return 1 / (2. ** (x - 1))
 
-    def slanted_triangle_scale_fn(self, x) -> float:
-        return
-
     def _exp_range_scale_fn(self, x) -> float:
         return self.gamma ** x
 
@@ -165,11 +168,6 @@ class CyclicalLearningRate(object):
 
         # number of batch steps made since last complete cycle
         iteration_since_last_cycle = self.last_batch_iteration % self.cycle_size
-
-        # vary between the range of 0 and 1
-        # start -> mid -> end
-        # 1     ->  0  ->  1
-        # proportion_of_step_completed = abs(self.last_batch_iteration / step_size - 2 * cycle_num + 1)
 
         # ramping up or down
         is_ramp_up = True if iteration_since_last_cycle <= self.ramp_up_step_size else False

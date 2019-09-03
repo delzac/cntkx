@@ -132,6 +132,7 @@ Example:
 | [fwd_wt103.hdf5](https://1drv.ms/u/s!AjJ4XyC3prp8mItNxiawGK4gD8iMhA?e=wh7PLB) | The weight parameters of the fastai's pytorch model. To be used to initialise `PretrainedWikitext103LanguageModel` |
 | [fwd_wt103.cntk](https://1drv.ms/u/s!AjJ4XyC3prp8mItPBdfmDYr9QP7J4w?e=k1BXlW) | The converted cntk model of fastai's pytorch model. To be used with `C.load_model` |
 | [fwd_wt103.onnx](https://1drv.ms/u/s!AjJ4XyC3prp8mItO70T_q8HOPwa6aQ?e=h2Fiv5) | The converted ONNX model of fastai's pytorch model. |
+| [itos_wt103.pkl](http://files.fast.ai/models/wt103/) | Tokens used in pretrained model |
 
 
 ***2019-08-08.***

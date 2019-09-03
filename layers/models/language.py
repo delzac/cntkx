@@ -1,6 +1,5 @@
 from ...layers import Recurrence, LSTM, Embedding
 from cntk.layers import Label
-import h5py
 
 
 def PretrainedWikitext103LanguageModel(model_file_path: str, weight_drop_rate: float = None, v_dropout_rate: float = None):
@@ -46,6 +45,7 @@ def PretrainedWikitext103LanguageModel(model_file_path: str, weight_drop_rate: f
         :class:`~cntk.ops.functions.Function`:
 
     """
+    import h5py
     model_params = h5py.File(model_file_path, 'r')
     layer_names = ['0.encoder.weight',
                    '0.encoder_with_dropout.embed.weight',

@@ -2,7 +2,6 @@ import numpy as np
 from typing import List, Union
 from sklearn.preprocessing import LabelBinarizer
 from os.path import join, basename
-import h5py
 
 
 class CTCEncoder:
@@ -123,8 +122,9 @@ class CTCEncoder:
 def convert_pytorch_state_dict_to_h5_file(model_file_path: str, save_directory: str):
     try:
         import torch
+        import h5py
     except ImportError:
-        raise ImportError(f'Please install Pytorch first to use this function')
+        raise ImportError(f'Please install Pytorch and h5py first to use this function')
 
     h5_file_path = join(save_directory, f'{basename(model_file_path)}.hdf5')
 

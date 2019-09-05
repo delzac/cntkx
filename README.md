@@ -106,7 +106,7 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
-***2019-08-29.***
+***2019-09-06.***
 #### Added `BiRecurrence` with weight tying
 Add a wrapper to create a bidirectional recurrent layer using `BiRecurrence`. Included in the implementation
 is an option to half the number of parameters required by  bidirectional recurrent layer. This is done

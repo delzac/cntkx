@@ -55,6 +55,7 @@ cntkx only works with `python>=3.6`
 | `SequentialAveragePooling` | Average pool across sequential axis and static axes |
 | `vFSMN` | Vectorised Feedforward Sequential Memory Networks |
 | `cFSMN` | Compact Feedforward Sequential Memory Networks |
+| `BiRecurrence` | BiRecurrence recurrent layer with weight tying option to half parameter requirement |
 
 | Blocks | Description |
 | --- | ---|
@@ -105,6 +106,24 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-08-29.***
+#### Added `BiRecurrence` with weight tying
+Add a wrapper to create a bidirectional recurrent layer using `BiRecurrence`. Included in the implementation
+is an option to half the number of parameters required by  bidirectional recurrent layer. This is done
+by only using one recurrent unit to do both forward and backward computation instead of the usual two.
+A forward and backward token is used to initialise the hidden state so that the recurrent unit can tell
+the directionality.
+
+More details can be found in the paper [Efficient Bidirectional Neural Machine Translation](https://arxiv.org/abs/1908.09329)
+
+Example:
+
+    a = C.sequence.input_variable(10)
+    b = BiRecurrence(LSTM(100), weight_tie=True)(a)
+    
+    assert b.shape == (200, )
+
+
 ***2019-08-29.***
 #### Added `PretrainedWikitext103LanguageModel`
 CNTK implementation of Fast AI's Universal  Language  ModelFine-tuning (ULMFiT) English model has been added.

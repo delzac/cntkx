@@ -10,6 +10,7 @@ from cntk.layers import SentinelValueForAutoSelectRandomSeed
 from cntk.layers.blocks import _get_initial_state_or_default, _inject_name
 from cntk.default_options import get_default_override, default_override_or
 from cntk.layers.sequence import _santize_step_function, RecurrenceFrom
+from .layers import Embedding
 
 
 # TODO: Include RecurrenceFrom in here
@@ -167,17 +168,54 @@ def Recurrence(step_function, go_backwards=default_override_or(False), initial_s
 
 
 def BiRecurrence(step_function: C.Function, initial_state=0, dropout_rate_input=None, dropout_rate_output=None,
-                 seed=SentinelValueForAutoSelectRandomSeed, name=''):
-    """ Convenience wrapper to create a bidirectional rnn """
-    fxn1 = step_function
-    fxn2 = step_function.clone(C.CloneMethod.clone, {})
+                 weight_tie: bool = False, seed=SentinelValueForAutoSelectRandomSeed, name=''):
+    """ Wrapper to create a bidirectional rnn
 
-    forward = Recurrence(fxn1, dropout_rate_input=dropout_rate_input, dropout_rate_output=dropout_rate_output, initial_state=initial_state, seed=seed)
-    backward = Recurrence(fxn2, dropout_rate_input=dropout_rate_input, dropout_rate_output=dropout_rate_output, initial_state=initial_state, seed=seed, go_backwards=True)
+    Also comes with the option to to half the number of parameters required by  bidirectional recurrent layer.
+    This is done by only using one recurrent unit to do both forward and backward computation instead of
+    the usual two. A forward and backward token is used to initialise the hidden state so that the recurrent
+    unit can tell the directionality.
+
+    More details can be found in the paper 'Efficient Bidirectional Neural Machine Translation' (https://arxiv.org/abs/1908.09329)
+
+    Example:
+        a = C.sequence.input_variable(10)
+        b = BiRecurrence(LSTM(100), weight_tie=True)(a)
+
+        assert b.shape == (200, )
+
+    Arguments:
+        step_function (:class:`~cntk.ops.functions.Function` or equivalent Python function):
+            This function must have N+1 inputs and N outputs, where N is the number of state variables
+            (typically 1 for GRU and plain RNNs, and 2 for LSTMs).
+        initial_state:
+        dropout_rate_input: variational dropout on input
+        dropout_rate_output: variational dropoput on output
+        weight_tie (bool): whether to use only one recurrent function for computation in both direction.
+        seed (int): seed for randomisation
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+        A function that accepts one argument (which must be a sequence) and performs the recurrent operation on it
+    """
+    fxn1 = step_function
+    fxn2 = step_function.clone(C.CloneMethod.clone, {}) if not weight_tie else fxn1
+
+    forward_token = initial_state
+    backward_token = initial_state
+    if weight_tie:
+        hidden_dim = min([i for p in fxn1.parameters for i in p.shape if i > 0])
+        forward_token = C.Parameter(shape=(hidden_dim,), init=C.glorot_normal(), name='f_token')
+        backward_token = C.Parameter(shape=(hidden_dim,), init=C.glorot_normal(), name='b_token')
+
+    forward = Recurrence(fxn1, dropout_rate_input=dropout_rate_input, dropout_rate_output=dropout_rate_output, initial_state=forward_token, seed=seed)
+    backward = Recurrence(fxn2, dropout_rate_input=dropout_rate_input, dropout_rate_output=dropout_rate_output, initial_state=backward_token, seed=seed, go_backwards=True)
 
     @C.Function
     def inner(x):
-        return C.splice(forward(x), backward(x), axis=-1)
+        output = C.splice(forward(x), backward(x), axis=-1)
+        return C.layers.Label(name)(output) if name else output
 
     return inner
 

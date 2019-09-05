@@ -1,6 +1,6 @@
 import cntk as C
 import numpy as np
-from cntkx.layers.sequence import Recurrence, VariationalDropout, PyramidalBiRecurrence
+from cntkx.layers.sequence import Recurrence, VariationalDropout, PyramidalBiRecurrence, BiRecurrence
 from cntk.layers import LSTM
 
 
@@ -93,7 +93,7 @@ def test_pyramidal_bi_recurrence():
 
     assert b.shape == (hidden_dim * 2 * width, )
 
-    n = np.random.random((1, 16, 10))
+    n = np.random.random((1, 16, 10)).astype(np.float32)
     result = b.eval({a: n})[0]
 
     assert result.shape == (seq_length / width, hidden_dim * 2 * width)
@@ -111,3 +111,24 @@ def test_variational_dropout():
     result = list(result.values())[0][0]
 
     np.testing.assert_equal(np.sum(np.equal(result.sum(axis=0), 0)), dim * dropout_rate)
+
+
+def test_birecurrence():
+    dim = 10
+    hidden_dim = 30
+
+    a = C.sequence.input_variable(dim)
+    b = BiRecurrence(LSTM(hidden_dim), weight_tie=False)(a)
+
+    assert b.shape == (hidden_dim * 2,)
+
+    c = BiRecurrence(LSTM(hidden_dim), weight_tie=True)(a)
+
+    assert c.shape == b.shape
+    assert len(c.parameters) < len(b.parameters)
+
+    n = [np.random.random((5, 10)).astype(np.float32),
+         np.random.random((7, 10)).astype(np.float32),]
+
+    c.eval({a: n})
+    b.eval({a: n})

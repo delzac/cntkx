@@ -88,9 +88,10 @@ class CyclicalLearningRate(object):
      ...         clr.batch_step()  # must be called once for every training iteration/update
     """
 
-    def __init__(self, parameter_learner, base_lr=1e-3, max_lr=6e-3, minibatch_size=None,
-                 ramp_up_step_size=2000, ramp_down_step_size: int = None, lr_policy: str = 'triangular2', gamma=0.99994,
-                 scale_fn=None, scale_by: str = None, record_history: bool = False, last_batch_iteration: int = -1):
+    def __init__(self, parameter_learner, base_lr=1e-3, max_lr=6e-3, warm_up_lr: float = 0., warm_up_size: int = 0,
+                 ramp_up_step_size: int = 2000, ramp_down_step_size: int = None, minibatch_size=None,
+                 lr_policy: str = 'triangular2', gamma: float = 0.99994, scale_fn=None, scale_by: str = None,
+                 record_history: bool = False, last_batch_iteration: int = -1):
 
         if lr_policy not in ['triangular', 'triangular2', 'exp_range'] and scale_fn is None:
             raise ValueError('lr_policy is invalid and scale_fn is None')
@@ -104,7 +105,9 @@ class CyclicalLearningRate(object):
         self.parameter_learner = parameter_learner
         self.base_lr = base_lr
         self.max_lr = max_lr
+        self.warm_up_lr = warm_up_lr or self.base_lr
 
+        self.warm_up_size = warm_up_size
         self.ramp_up_step_size = ramp_up_step_size
         self.ramp_down_step_size = ramp_down_step_size or ramp_up_step_size
         self.cycle_size = self.ramp_up_step_size + self.ramp_down_step_size
@@ -163,11 +166,20 @@ class CyclicalLearningRate(object):
 
     def get_lr(self) -> float:
         """ Get learning rate based on last_batch_iteration count """
+        current_iteration_num = self.last_batch_iteration
+
+        iterations_after_warmup = current_iteration_num
+        if current_iteration_num < self.warm_up_size:
+            return self.warm_up_lr
+
+        else:
+            iterations_after_warmup -= self.warm_up_size
+
         # Cycle number
-        cycle_num: int = math.floor(1 + self.last_batch_iteration / self.cycle_size)
+        cycle_num: int = math.floor(1 + iterations_after_warmup / self.cycle_size)
 
         # number of batch steps made since last complete cycle
-        iteration_since_last_cycle = self.last_batch_iteration % self.cycle_size
+        iteration_since_last_cycle = iterations_after_warmup % self.cycle_size
 
         # ramping up or down
         is_ramp_up = True if iteration_since_last_cycle <= self.ramp_up_step_size else False
@@ -180,7 +192,7 @@ class CyclicalLearningRate(object):
             base_height = (self.max_lr - self.base_lr) * (1 - num_batch_steps_in_ramp / self.ramp_down_step_size)
 
         # base_height = (self.max_lr - self.base_lr) * max(0., (1 - proportion_of_step_completed))
-        xx = cycle_num if self.scale_by == "cycle" else self.last_batch_iteration
+        xx = cycle_num if self.scale_by == "cycle" else iterations_after_warmup
         lr = self.base_lr + base_height * self.scale_fn(xx)
         return lr
 

@@ -18,7 +18,8 @@ def test_clr1():
                                max_lr=max_lr,
                                minibatch_size=minibatch_size,
                                ramp_up_step_size=2000,
-                               ramp_down_step_size=4000,)
+                               ramp_down_step_size=4000,
+                               warm_up_size=4000)
     lr_schedule = clr.get_lr_schedule()
 
     plt.scatter(range(lr_schedule.shape[0]), lr_schedule, s=1)
@@ -38,9 +39,12 @@ def test_clr2():
     clr = CyclicalLearningRate(sgd,
                                base_lr=base_lr,
                                max_lr=max_lr,
+                               warm_up_lr=base_lr / 2,
                                minibatch_size=minibatch_size,
                                ramp_up_step_size=2000,
-                               ramp_down_step_size=4000, lr_policy='triangular')
+                               ramp_down_step_size=4000,
+                               warm_up_size=6000,
+                               lr_policy='triangular')
     lr_schedule = clr.get_lr_schedule()
 
     plt.scatter(range(lr_schedule.shape[0]), lr_schedule, s=1)

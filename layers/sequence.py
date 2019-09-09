@@ -205,9 +205,8 @@ def BiRecurrence(step_function: C.Function, initial_state=0, dropout_rate_input=
     forward_token = initial_state
     backward_token = initial_state
     if weight_tie:
-        hidden_dim = min([i for p in fxn1.parameters for i in p.shape if i > 0])
-        forward_token = C.Parameter(shape=(hidden_dim,), init=C.glorot_normal(), name='f_token')
-        backward_token = C.Parameter(shape=(hidden_dim,), init=C.glorot_normal(), name='b_token')
+        forward_token = C.Parameter(shape=(-1,), init=C.glorot_normal(), name='f_token')
+        backward_token = C.Parameter(shape=(-1,), init=C.glorot_normal(), name='b_token')
 
     forward = Recurrence(fxn1, dropout_rate_input=dropout_rate_input, dropout_rate_output=dropout_rate_output, initial_state=forward_token, seed=seed)
     backward = Recurrence(fxn2, dropout_rate_input=dropout_rate_input, dropout_rate_output=dropout_rate_output, initial_state=backward_token, seed=seed, go_backwards=True)

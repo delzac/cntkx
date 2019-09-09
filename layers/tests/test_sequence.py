@@ -1,6 +1,7 @@
 import cntk as C
 import numpy as np
 from cntkx.layers.sequence import Recurrence, VariationalDropout, PyramidalBiRecurrence, BiRecurrence
+from cntkx.layers import IndyLSTM
 from cntk.layers import LSTM
 
 
@@ -126,6 +127,13 @@ def test_birecurrence():
 
     assert c.shape == b.shape
     assert len(c.parameters) < len(b.parameters)
+    assert c.f_token.shape == c.b_token.shape == (hidden_dim, )
+
+    d = BiRecurrence(IndyLSTM(hidden_dim), weight_tie=True)(a)
+
+    assert d.shape == b.shape
+    assert len(c.parameters) < len(b.parameters)
+    assert d.f_token.shape == d.b_token.shape == (hidden_dim, )
 
     n = [np.random.random((5, 10)).astype(np.float32),
          np.random.random((7, 10)).astype(np.float32),]

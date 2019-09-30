@@ -106,6 +106,13 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-09-30.***
+#### Added `BiRecurrence` with weight tying
+Made improvement to weight tying of BiRecurrence by have one parameter tensor token for every state 
+in the step function per direction (forward and backward). This will allow forward and backward token
+to have more representational flexibility. Previously, all states use the same forward or backward token.
+
+
 ***2019-09-06.***
 #### Added `BiRecurrence` with weight tying
 Add a wrapper to create a bidirectional recurrent layer using `BiRecurrence`. Included in the implementation

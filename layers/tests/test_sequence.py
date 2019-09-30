@@ -126,14 +126,18 @@ def test_birecurrence():
     c = BiRecurrence(LSTM(hidden_dim), weight_tie=True)(a)
 
     assert c.shape == b.shape
-    assert len(c.parameters) < len(b.parameters)
-    assert c.f_token.shape == c.b_token.shape == (hidden_dim, )
+    assert len(b.parameters) == 3 + 3
+    assert len(c.parameters) == 3 + 4
+    assert c.f_token0.shape == c.b_token0.shape == (hidden_dim, )
+    assert c.f_token1.shape == c.b_token1.shape == (hidden_dim, )
 
     d = BiRecurrence(IndyLSTM(hidden_dim), weight_tie=True)(a)
 
     assert d.shape == b.shape
-    assert len(c.parameters) < len(b.parameters)
-    assert d.f_token.shape == d.b_token.shape == (hidden_dim, )
+    assert len(b.parameters) == 3 + 3
+    assert len(d.parameters) == 3 + 4
+    assert d.f_token0.shape == d.b_token0.shape == (hidden_dim, )
+    assert d.f_token1.shape == d.b_token1.shape == (hidden_dim, )
 
     n = [np.random.random((5, 10)).astype(np.float32),
          np.random.random((7, 10)).astype(np.float32),]

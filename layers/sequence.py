@@ -202,14 +202,15 @@ def BiRecurrence(step_function: C.Function, initial_state=0, dropout_rate_input=
     fxn1 = step_function
     fxn2 = step_function.clone(C.CloneMethod.clone, {}) if not weight_tie else fxn1
 
-    forward_token = initial_state
-    backward_token = initial_state
+    forward_tokens = initial_state
+    backward_tokens = initial_state
     if weight_tie:
-        forward_token = C.Parameter(shape=(-1,), init=C.glorot_normal(), name='f_token')
-        backward_token = C.Parameter(shape=(-1,), init=C.glorot_normal(), name='b_token')
+        *prev_state_args, _ = step_function.signature  # Python 3
+        forward_tokens = tuple(C.Parameter(shape=(-1,), init=C.glorot_normal(), name=f'f_token{i}') for i in range(len(prev_state_args)))
+        backward_tokens = tuple(C.Parameter(shape=(-1,), init=C.glorot_normal(), name=f'b_token{i}') for i in range(len(prev_state_args)))
 
-    forward = Recurrence(fxn1, dropout_rate_input=dropout_rate_input, dropout_rate_output=dropout_rate_output, initial_state=forward_token, seed=seed)
-    backward = Recurrence(fxn2, dropout_rate_input=dropout_rate_input, dropout_rate_output=dropout_rate_output, initial_state=backward_token, seed=seed, go_backwards=True)
+    forward = Recurrence(fxn1, dropout_rate_input=dropout_rate_input, dropout_rate_output=dropout_rate_output, initial_state=forward_tokens, seed=seed)
+    backward = Recurrence(fxn2, dropout_rate_input=dropout_rate_input, dropout_rate_output=dropout_rate_output, initial_state=backward_tokens, seed=seed, go_backwards=True)
 
     @C.Function
     def inner(x):

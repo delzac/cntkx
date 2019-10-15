@@ -20,6 +20,7 @@ cntkx only works with `python>=3.6`
 | `upsample` | Upsample by 2x (for image) |
 | `centre_crop` | Crop centre of image |
 | `swish` | Activation |
+| `mish` | Activation |
 | `hardmax` | Activation |
 | `erf` | Error function |
 | `gelu` | Gaussian Error Linear Unit function |
@@ -88,6 +89,7 @@ cntkx only works with `python>=3.6`
 | Learners | Description |
 | --- | ---|
 | `CyclicalLearningRate` | a method to eliminate the need to find best value and schedule for learning rate |
+| `RAdam` | a variant of `Adam` that doesn't require any warmup |
 
 | Misc | Description |
 | --- | ---|
@@ -106,6 +108,26 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-10-15.***
+#### Added `mish` activation function and `RAdam` learner.
+`mish` is an activation function is introduced in [Mish: A Self Regularized Non-Monotonic Neural Activation Function](https://arxiv.org/abs/1908.08681v2)
+by Diganta Misra. Experiments show that `mish` tends to work better than both ReLU and Swish along with other standard
+activation functions in many deep networks across challenging datasets. For instance,
+in Squeeze Excite Net-18 for CIFAR 100 classification, the network with Mish had an increase in
+Top-1 test accuracy by 0.494% and 1.671% as compared to the same network with Swish and ReLU respectively.
+The similarity to Swish along with providing a boost in performance and its simplicity in implementation
+makes it easier for researchers and developers to use Mish in their Neural Network Models.
+
+This activation function is adopted in `fast ai`.
+
+Rectified Adam or `RAdam` is a `Adam` optimiser variant that doesn't require a warmup schedule, which `Adam` tends
+to need to maintain stability. In this cntk implementation, we added a `RAdam` like optimiser based
+on the work of [On the adequacy of untuned warmup for adaptive optimization](https://arxiv.org/abs/1910.04209) by Jerry Ma and Denis Yarats.
+
+`RAdam` is adopted in `fast ai` too.
+
+
+
 ***2019-09-30.***
 #### Added `BiRecurrence` with weight tying
 Made improvement to weight tying of BiRecurrence by have one parameter tensor token for every state 

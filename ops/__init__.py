@@ -211,6 +211,32 @@ def swish(x, name=''):
 
 
 @C.typemap
+def mish(x, name=''):
+    """ Mish activation function is introduced in 'Mish: A Self Regularized Non-Monotonic Neural Activation Function'
+    by Diganta Misra.
+
+    Experiments show that Mish tends to work better than both ReLU and Swish along with other standard
+    activation functions in many deep networks across challenging datasets. For instance,
+    in Squeeze Excite Net-18 for CIFAR 100 classification, the network with Mish had an increase in
+    Top-1 test accuracy by 0.494% and 1.671% as compared to the same network with Swish and ReLU respectively.
+    The similarity to Swish along with providing a boost in performance and its simplicity in implementation
+    makes it easier for researchers and developers to use Mish in their Neural Network Models.
+
+    This activation function is adopted in Fast ai too. It should be noted that you are trading some
+    computation complexity for a small performance boost.
+
+    Maintainer's note: based on testing, the additional computation complexity is minimal.
+
+    For more detail, the paper can be found here 'https://arxiv.org/abs/1908.08681v2'
+    """
+    @C.BlockFunction('Mish', name=name)
+    def inner(a):
+        return a * C.tanh(C.softplus(a))
+
+    return inner(x)
+
+
+@C.typemap
 def hardmax(x, axis=-1, name=''):
     """
     This hardmax implementation can be applied on selected axis. Original cntk hardmax can only be applied on all axis.

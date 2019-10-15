@@ -2,6 +2,8 @@ import cntk as C
 import math
 import numpy as np
 from typing import List
+from cntk.learners import _infer_learning_rate_schedule_and_ref_minibatch_size, _infer_learning_parameter_schedule, _verify_momentum_type
+from cntk import cntk_py
 
 
 class CyclicalLearningRate(object):
@@ -262,3 +264,68 @@ class CyclicalLearningRate(object):
             history = np.mean(history, axis=1)
 
         return history
+
+
+def exponential_warmup_schedule(lr: float, tau: float) -> List[float]:
+    return [lr * min(1., 1 - math.exp(- 1 / tau * (i + 1))) for i in range(10_000)] + [lr]
+
+
+def adam_exponential_warmup_schedule(lr: float, beta2: float) -> List[float]:
+    return exponential_warmup_schedule(lr, 1 / (1 - beta2))
+
+
+@C.typemap
+def RAdam(parameters, lr, momentum=0.9, unit_gain=C.default_unit_gain_value(),
+         beta2=0.999, l1_regularization_weight=0.0, l2_regularization_weight=0.0,
+         gaussian_noise_injection_std_dev=0.0, gradient_clipping_threshold_per_sample=np.inf,
+         gradient_clipping_with_truncation=True, use_mean_gradient=None, epsilon=1e-8, adamax=False,
+         minibatch_size=None, epoch_size=None):
+    """ RAdam like implementation using Adam with exponential warmup schedule. No tuning of
+    warmup schedule required, unlike Adam.
+
+    This is a simple untuned warmup of Adam with 'rule-of-thumb' warmup schedule that performs
+    more-or-less identically to RAdam in typical practical settings based on
+    'On the adequacy of untuned warmup for adaptive optimization' by Jerry Ma and Denis Yarats.
+
+    For more details, paper can be found here 'https://arxiv.org/abs/1910.04209'
+
+    Args:
+        ... please look at original documentation in cntk.learner.adam
+        epoch_size (optional, int): number of samples as a scheduling unit for learning rate, momentum and variance_momentum. See also:  :func:`learning_parameter_schedule`
+
+    Returns:
+        :class:`~cntk.learners.Learner`: learner instance that can be passed to
+        the :class:`~cntk.train.trainer.Trainer`
+
+    See also:
+        [1] D. Kingma, J. Ba. `Adam: A Method for Stochastic Optimization
+        <https://arxiv.org/abs/1412.6980>`_. International Conference for
+        Learning Representations, 2015.
+    """
+    if epoch_size is None:
+        raise ValueError("epoch size should be set to the number of samples per minibatch "
+                         "(i.e. number of samples trained in every training update) so that "
+                         "learning rate factor can be updated after every training update")
+
+    lr = adam_exponential_warmup_schedule(lr, beta2)  # rule-of-thumb exponential warmup schedule
+
+    lr, minibatch_size = _infer_learning_rate_schedule_and_ref_minibatch_size(use_mean_gradient, minibatch_size, lr, epoch_size)
+
+    momentum = _infer_learning_parameter_schedule(momentum, minibatch_size, epoch_size)
+    _verify_momentum_type(momentum)
+    variance_momentum = _infer_learning_parameter_schedule(beta2, minibatch_size, epoch_size)
+    _verify_momentum_type(variance_momentum)
+    gaussian_noise_injection_std_dev = C.training_parameter_schedule(gaussian_noise_injection_std_dev)
+
+    additional_options = cntk_py.AdditionalLearningOptions()
+    additional_options.l1_regularization_weight = l1_regularization_weight
+    additional_options.l2_regularization_weight = l2_regularization_weight
+    additional_options.gaussian_noise_injection_std_dev = gaussian_noise_injection_std_dev
+    additional_options.gradient_clipping_threshold_per_sample = gradient_clipping_threshold_per_sample
+    additional_options.gradient_clipping_with_truncation = gradient_clipping_with_truncation
+    if minibatch_size is not None:
+        additional_options.dict_options[cntk_py.Learner._MINIBATCH_SIZE] = cntk_py.SizeTWrapper(minibatch_size)  # need this to make proper typed DictionaryValue
+
+    opt = cntk_py.adam_learner(parameters, lr, momentum, unit_gain, variance_momentum, epsilon, adamax, additional_options)
+    opt.is_minibatch_size_explicitly_specified = minibatch_size is not None
+    return opt

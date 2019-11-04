@@ -281,3 +281,31 @@ def reduce_mean(seq, name=''):
         return c
 
     return inner(seq)
+
+
+def reduce_concat_pool(x, axis=0, name=''):
+    """ Reduce concat pooling: concatenates the last seq item with the reduce_max and reduce_mean of the sequence axis.
+    This is can be used as a drop-in replacement anytime sequence.last is used. It will provide superior performance
+    compared to it.
+
+    Examples:
+        n = 32
+        a = C.sequence.input_variable(n)
+        b = Cx.sequence.reduce_concat_pool(a)
+
+        assert b.shape == (n * 3, )
+
+    Arguments:
+        x: input tensor
+        axis: concatenation axis
+        name (`str`, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+
+    """
+    @C.BlockFunction('Sequence::ReduceConcatPool', name)
+    def inner(a):
+        return C.splice(C.sequence.last(a), C.sequence.reduce_max(a), Cx.sequence.reduce_mean(a), axis=axis)
+
+    return inner(x)

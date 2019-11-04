@@ -1200,6 +1200,21 @@ def SequentialConcatPooling(filter_shape,  # shape of receptive field, e.g. (3,3
     return inner
 
 
+def GlobalConcatPooling(name=''):
+    """ Global Concat Pooling: concatenation of both Max and Ave Pooling
+    In any situation where max pooling or ave pooling is appropriate, concat pooling
+    would a drop-in replacement that will provide a performance boost.
+    """
+    pool1 = C.layers.GlobalMaxPooling()
+    pool2 = C.layers.GlobalAveragePooling()
+
+    @C.BlockFunction('GlobalConcatPooling', name)
+    def inner(x):
+        return C.splice(C.squeeze(pool1(x)), C.squeeze(pool2(x)), axis=0)
+
+    return inner
+
+
 def GatedLinearUnit(window=2, hidden_dim=None, activation=C.sigmoid, name=''):
     """
     Gated Linear Unit or gated convolutional neural network is a finite context approach

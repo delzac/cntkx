@@ -109,24 +109,40 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 ## News
 ***2019-11-04.***
-#### Added `SequentialConcatPooling`
-`SequentialConcatPooling` does concat pooling over the sequential axis.
+#### Added `SequentialConcatPooling`, `Cx.Sequence.reduce_concat_pool` and `GlobalConcatPooling`
+`Cx.Sequence.reduce_concat_pool` concatenates the last item in the sequence axis with the summarisation
+of the sequence represented by `reduce_max` and `reduce_mean` of the sequence axis. Anytime `C.sequence.last` is used,
+this can be a drop-in replacement.
+
+Example:
+
+    n = 32
+    a = C.sequence.input_variable(n)
+    b = Cx.sequence.reduce_concat_pool(a)
+
+    assert b.shape == (n * 3, )
+
+
+`SequentialConcatPooling` does spatial concat pooling over the sequential axis.
 Concat pooling is the concatenation of both average pooling and max pooling. In any situation where max or ave 
 pooling is appropriate, concat pooling can be used as a drop-in replacement and achieve improvements in performance.
 
 Example:
 
-        a = C.sequence.input_variable((3, 10))
-        b = SequentialConcatPooling(filter_shape=(2, 2), strides=2)(a)
-        
-        assert b.shape == (6, 10)
-                
-        n = [np.random.random((3, 10)).astype(np.float32),
-             np.random.random((3, 10)).astype(np.float32),
-             np.random.random((3, 10)).astype(np.float32),
-             np.random.random((3, 10)).astype(np.float32), ]
-        
-        print(b.eval({a: n}))
+    a = C.sequence.input_variable((3, 10))
+    b = SequentialConcatPooling(filter_shape=(2, 2), strides=2)(a)
+    
+    assert b.shape == (6, 10)
+            
+    n = [np.random.random((3, 10)).astype(np.float32),
+         np.random.random((3, 10)).astype(np.float32),
+         np.random.random((3, 10)).astype(np.float32),
+         np.random.random((3, 10)).astype(np.float32), ]
+    
+    print(b.eval({a: n}))
+
+
+`GlobalConcatPooling` is the standard spatial concat pooling of both max pool and ave pool.
 
 
 ***2019-10-15.***

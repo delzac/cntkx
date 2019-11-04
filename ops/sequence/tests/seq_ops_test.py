@@ -1,5 +1,5 @@
 import cntk as C
-from cntkx.ops.sequence import length, pad, stride, position, join, window, reverse, reduce_mean
+from cntkx.ops.sequence import length, pad, stride, position, join, window, reverse, reduce_mean, reduce_concat_pool
 import numpy as np
 
 
@@ -210,3 +210,16 @@ def test_reduce_mean():
 
     for r, d in zip(results, n):
         np.testing.assert_almost_equal(r, np.mean(d, axis=0))
+
+
+def test_reduce_concat_pool():
+    a = C.sequence.input_variable(32)
+    b = reduce_concat_pool(a)
+
+    assert b.shape == (32 * 3, )
+
+    n = [np.random.random((10, 32)).astype(np.float32),
+         np.random.random((10, 32)).astype(np.float32),
+         np.random.random((10, 32)).astype(np.float32), ]
+
+    b.eval({a: n})

@@ -1165,6 +1165,41 @@ def SequentialAveragePooling(filter_shape,  # shape of receptive field, e.g. (3,
     return inner
 
 
+def SequentialConcatPooling(filter_shape,  # shape of receptive field, e.g. (3,3) filter_shape[0] is for sequence axis
+                            strides=1,  # strides[0] is for sequence axis.
+                            pad=default_override_or(True),  # pad[0] is for sequence axis.
+                            name=''):
+    """
+    `SequentialConcatPooling` does concat pooling over the sequential axis.
+    Concat pooling is the concatenation of both average pooling and max pooling. In any situation where max or ave
+    pooling is appropriate, concat pooling can be used as a drop-in replacement and achieve improvements in performance.
+
+    Example:
+        a = C.sequence.input_variable((3, 10))
+        b = SequentialConcatPooling(filter_shape=(2, 2), strides=2)(a)
+
+        assert b.shape == (6, 10)
+
+        n = [np.random.random((3, 10)).astype(np.float32),
+             np.random.random((3, 10)).astype(np.float32),
+             np.random.random((3, 10)).astype(np.float32),
+             np.random.random((3, 10)).astype(np.float32), ]
+
+        print(b.eval({a: n}))
+
+    """
+    seq_ave_pool = SequentialAveragePooling(filter_shape, strides, pad, '')
+    seq_max_pool = SequentialMaxPooling(filter_shape, strides, pad, '')
+
+    @C.BlockFunction('SequentialConcatPooling', name)
+    def inner(x):
+        ave_pooled = seq_ave_pool(x)
+        max_pooled = seq_max_pool(x)
+        return C.splice(ave_pooled, C.reconcile_dynamic_axes(max_pooled, ave_pooled), axis=0)
+
+    return inner
+
+
 def GatedLinearUnit(window=2, hidden_dim=None, activation=C.sigmoid, name=''):
     """
     Gated Linear Unit or gated convolutional neural network is a finite context approach

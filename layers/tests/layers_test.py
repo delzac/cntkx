@@ -3,7 +3,7 @@ import cntkx as Cx
 from cntkx.layers import QRNN, SinusoidalPositionalEmbedding, SpatialPyramidPooling, GatedLinearUnit
 from cntkx.layers import BertEmbeddings, PositionalEmbedding, SequentialAveragePooling
 from cntkx.layers import PreTrainedBertEmbeddings, PositionwiseFeedForward, SequentialMaxPooling
-from cntkx.layers import vFSMN, cFSMN
+from cntkx.layers import vFSMN, cFSMN, SequentialConcatPooling
 import numpy as np
 
 
@@ -481,6 +481,31 @@ def test_sequential_average_pooling():
 
     # ignore the first and last seq item because SequentialAveragePooling included padding in average calculation
     np.testing.assert_almost_equal(output[1:-1], desired[1:-1])
+
+
+def test_sequential_concat_pooling():
+    a = C.sequence.input_variable((3, 10))
+    b = SequentialConcatPooling(filter_shape=(2, 2), strides=2)(a)
+
+    assert b.shape == (6, 5)
+
+    n = [np.random.random((3, 10)).astype(np.float32),
+         np.random.random((3, 10)).astype(np.float32),
+         np.random.random((3, 10)).astype(np.float32),
+         np.random.random((3, 10)).astype(np.float32), ]
+
+    b.eval({a: n})
+
+    b = SequentialConcatPooling(filter_shape=(2, 2), strides=2, pad=False)(a)
+
+    assert b.shape == (6, 5)
+
+    n = [np.random.random((3, 10)).astype(np.float32),
+         np.random.random((3, 10)).astype(np.float32),
+         np.random.random((3, 10)).astype(np.float32),
+         np.random.random((3, 10)).astype(np.float32), ]
+
+    b.eval({a: n})
 
 
 def test_convolution_2d():

@@ -108,6 +108,27 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-11-04.***
+#### Added `SequentialConcatPooling`
+`SequentialConcatPooling` does concat pooling over the sequential axis.
+Concat pooling is the concatenation of both average pooling and max pooling. In any situation where max or ave 
+pooling is appropriate, concat pooling can be used as a drop-in replacement and achieve improvements in performance.
+
+Example:
+
+        a = C.sequence.input_variable((3, 10))
+        b = SequentialConcatPooling(filter_shape=(2, 2), strides=2)(a)
+        
+        assert b.shape == (6, 10)
+                
+        n = [np.random.random((3, 10)).astype(np.float32),
+             np.random.random((3, 10)).astype(np.float32),
+             np.random.random((3, 10)).astype(np.float32),
+             np.random.random((3, 10)).astype(np.float32), ]
+        
+        print(b.eval({a: n}))
+
+
 ***2019-10-15.***
 #### Added `mish` activation function and `RAdam` learner.
 `mish` is an activation function is introduced in [Mish: A Self Regularized Non-Monotonic Neural Activation Function](https://arxiv.org/abs/1908.08681v2)

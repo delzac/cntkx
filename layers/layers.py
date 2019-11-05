@@ -318,12 +318,7 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
         tuple of :class:`~cntk.ops.functions.Function`:
 
     """
-
-    sequential_conv = SequentialConvolution(filter_shape=(window,),
-                                            num_filters=3 * hidden_dim,
-                                            pad=False,
-                                            reduction_rank=1,
-                                            name='conv')
+    dense = Dense(shape=(3 * hidden_dim,), name='qrnn_dense')
 
     @C.Function
     def f_pool(c, zf):
@@ -337,9 +332,10 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
         input_sequence = input_tensor
         if window > 1:
             # to ensure causal relation is still preserved
-            input_sequence = Cx.sequence.pad(input_sequence, (window - 1, 0), constant_value=0)
+            frames = list(reversed([C.sequence.past_value(input_tensor, time_step=i + 1) for i in range(window)]))
+            input_sequence = C.splice(*frames, input_tensor, axis=0)
 
-        gate_values = sequential_conv(input_sequence)
+        gate_values = dense(input_sequence)
 
         x = C.slice(gate_values, -1, 0, hidden_dim)
         forget = C.slice(gate_values, -1, hidden_dim, 2 * hidden_dim)

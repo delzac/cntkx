@@ -33,6 +33,7 @@ cntkx only works with `python>=3.6`
 | `sequence.window` | creates non-overlapping window along the sequence axis  |
 | `sequence.reverse` | reverses the items along the dynamic sequence axis  |
 | `sequence.reduce_mean` | calculates the mean along the dynamic sequence axis  |
+| `sequence.reduce_concat_pool` | drop-in replace for sequence.last  |
 | `random.sample` | Samples an unnormalised log probability distribution |
 | `random.sample_top_k` | Samples from the top_k of an unnormalised log probability distribution |
 | `batchmatmul` | Batch Matrix Multiplication on a static batch axis, similar to tf.matmul |
@@ -54,9 +55,11 @@ cntkx only works with `python>=3.6`
 | `GaussianWindowAttention` | Windowed attention instead of conventional attention where everything is attended at the same time |
 | `SequentialMaxPooling` | Max pool across sequential axis and static axes |
 | `SequentialAveragePooling` | Average pool across sequential axis and static axes |
+| `SequentialConcatPooling` | Concat Average and Mean pool across sequential axis and static axes |
 | `vFSMN` | Vectorised Feedforward Sequential Memory Networks |
 | `cFSMN` | Compact Feedforward Sequential Memory Networks |
 | `BiRecurrence` | BiRecurrence recurrent layer with weight tying option to half parameter requirement |
+| `GlobalConcatPooling` | Global spatial concat pooling of ave and mean |
 
 | Blocks | Description |
 | --- | ---|

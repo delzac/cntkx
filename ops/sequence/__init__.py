@@ -1,11 +1,10 @@
 import cntk as C
-from cntk.internal import sanitize_input
 import cntkx as Cx
 from math import pi
+from typing import Tuple
 
 
-@C.typemap
-def pad(x, pattern, mode=C.CONSTANT_PAD, constant_value=0, name=''):
+def pad(x, pattern: Tuple[int, int], constant_value: float = 0, name=''):
     """
     Pads a tensor in the sequence axis according to the specified patterns.
     Three padding modes are supported: CONSTANT / REFLECT / SYMMETRIC.
@@ -13,25 +12,40 @@ def pad(x, pattern, mode=C.CONSTANT_PAD, constant_value=0, name=''):
     Arguments:
         x: tensor to be padded.
         pattern (tuple with 2 integers): how many values to add before and after the contents in the sequence axis.
-        mode (int): padding mode: C.ops.CONSTANT_PAD, C.ops.REFLECT_PAD and C.ops.SYMMETRIC_PAD
         constant_value: the value used to fill the padding cells, only meaningful under CONSTANT mode.
         name (str, optional): the name of the Function instance in the network
 
     Returns:
         :class:`~cntk.ops.functions.Function`
     """
-    if not all(isinstance(i, int) for i in pattern) or not isinstance(pattern, tuple):
-        raise ValueError(f"pattern {pattern} must be a tuple with 2 integers")
+    @C.BlockFunction('Sequence::Pad', name)
+    def inner(a):
+        paddings = [zeros_like(a, p) if p else None for p in pattern]
 
-    ndim = len(x.shape)
-    null_pattern = [(0, 0)] * ndim
-    final_pattern = [pattern] + null_pattern
+        if constant_value:
+            paddings = [padding + constant_value if padding is not None else padding for padding in paddings]
 
-    b, valid = C.sequence.unpack(x, padding_value=0).outputs
-    c = C.pad(b, final_pattern, mode=mode, constant_value=constant_value)
-    seq_length = C.reduce_sum(valid, axis=0) + C.Constant(sum(pattern))
-    d = C.to_sequence(c, seq_length, name=name)
-    return d
+        r = a
+        if paddings[0] is not None:
+            r = Cx.sequence.join(paddings[0], r)
+
+        if paddings[1] is not None:
+            r = Cx.sequence.join(r, paddings[1])
+        return r
+
+    return inner(x)
+
+
+def zeros_like(x, seq_length: int):
+    """ helper function to construct a sequence of zeros """
+    if seq_length > 1:
+        b = C.zeros_like(C.sequence.slice(x, 0, seq_length))
+    elif seq_length == 1:
+        b = C.to_sequence(C.expand_dims(C.zeros_like(C.sequence.first(x)), axis=C.Axis.new_leading_axis()))
+    else:
+        raise ValueError(f"length ({seq_length}) must be larger than 0")
+
+    return b
 
 
 @C.typemap

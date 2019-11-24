@@ -6,8 +6,75 @@ from cntk.layers.blocks import _inject_name
 
 
 ##########################################################################
+# non_diff ops
+##########################################################################
+@C.typemap
+def floor_division(left, right, name=''):
+    """ Computers the element-wise floor division. Behaves like // operator in python.
+
+    Examples:
+        a = C.constant([-3, 1, 2, 3, 4])
+        b = C.constant([2, 2, 2, 2, 2])
+
+        desired = [-2, 0, 1, 1, 2]
+        result = Cx.floor_division(a, b).eval().tolist()
+        assert result == desired
+
+    Arguments:
+        left: left side tensor
+        right: right side tensor
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+    """
+
+    @C.BlockFunction('FloorDivision', name)
+    def inner(x, y):
+        quotient = C.element_divide(x, y)
+        integers = C.floor(quotient)
+        return integers
+
+    return inner(left, right)
+
+
+##########################################################################
 # linear ops
 ##########################################################################
+def remainder(left, right, name=''):
+    """ Computes the element-wise remainder of division. Behaves like % operator in python.
+
+    Examples:
+        x = [-3, 1, 2, 3, 4, 3]
+        y = [2, 2, 2, 2, 2, -2]
+        a = C.constant(x)
+        b = C.constant(y)
+
+        desired = [i % j for i, j in zip(x, y)]  # [1, 1, 0, 1, 0, -1]
+        result = Cx.remainder(a, b).eval().tolist()
+        assert result == desired
+
+    Arguments:
+        left: left side tensor
+        right: right side tensor
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+
+    """
+
+    @C.BlockFunction('Remainder', name)
+    def inner(x, y):
+        quotient = C.element_divide(x, y)
+        integers = C.floor(quotient)
+        decimals = quotient - integers
+        remaining_value = decimals * y
+        return remaining_value
+
+    return inner(left, right)
+
+
 def scalar(x, name=''):
     """ select first element of x with shape (1,)
 

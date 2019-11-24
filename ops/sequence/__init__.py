@@ -91,16 +91,16 @@ def position(x, name=''):
     return inner(x)  # {#, *] [1,]
 
 
-def stride(x, s, tol=0.2, name=''):
-    """ Strides across sequential axis
+def stride(x, s, name=''):
+    """ Strides across sequential axis, picking up every s element start from the first sequential element.
 
-    Note:
-        Tested to work up to 1,000,000 sequence items. Beyond that tuning of `tol` might be necessary.
+    Example:
+        seq: [0, 1, 2, 3, 4, 5]
+        after stride(seq, 2): [0, 2, 4]
 
     Arguments:
         x: input sequence tensor
         s (int): sequential stride
-        tol (float): tolerance due to precision error of applying `sin` function, valid seq item not exactly zero.
         name (str): name of function
 
     Returns:
@@ -111,8 +111,9 @@ def stride(x, s, tol=0.2, name=''):
     @C.BlockFunction('Sequence::Stride', name)
     def inner(a):
         p = position(a)
-        integers = p / s  # every s sequence item will be an integer
-        valid = C.less_equal(C.abs(C.sin(integers * pi)), tol)  # sin of integer multiple of pi will return close to zero
+        quotient = p / s  # every s sequence item will be an integer
+        decimals = quotient - C.floor(quotient)  # every s sequence item will be a zero
+        valid = C.equal(decimals, 0)
         result = C.sequence.gather(a, valid)
         return result
 
@@ -162,36 +163,93 @@ def join(x, y, name=''):
     return inner(x, y)
 
 
-def window(x, width, new_axis=False, name=''):
-    """ Creates a non-overlapping window in sequence tensor
+def window(x, width: int, slide: int, new_axis=False, name=''):
+    """ Creates a non-causal window in the sequence tensor. Window contains future values.
 
-    It effectively reduces the sequence length by k factor while increasing tensor dimension by k factor.
+    It effectively reduces the sequence length by `slide` factor while increasing tensor dimension by `width` factor.
     Useful to reduce computation workload in recurrent networks. Used in pyramidal BLSTM in acoustic modelling.
+
+    Graphic:
+        sequence: [0, 1, 2, 3, 4, 5, 6, 7]
+        window(sequence, width=2, slide=2)
+
+        output: [[0, 2, 4, 6]
+                 [1, 3, 5, 7]]
+
 
     Example:
         width = 2
+        slide = 2
         a = C.sequence.input_variable(10)
-        b = Cx.sequence.window(a, width)
+        b = Cx.sequence.window(a, width, slide)
 
-        assert b.shape == (10 * k, )  # while sequence length reduces by a factor of k
+        assert b.shape == (10 * k, )  # while sequence length reduces by a factor of `slide`
 
     Arguments:
         x: input tensor
         width: width of window
+        slide: striding length along the sequential axis
         new_axis (bool): whether to concatenate to a new static axis or concatenate to the last axis
         name (str): name of function
 
     Returns:
         :class:`~cntk.ops.functions.Function`
-        A new sequence tensor with sequence length by k factor with tensor dimension increased by k factor
-
+        A new sequence tensor with sequence length by `slide` factor with tensor dimension increased by `width` factor
     """
 
     @C.BlockFunction('Sequence::Window', name)
     def inner(a):
-        w = [a] + [C.sequence.future_value(a, time_step=1 + i) for i in range(width - 1)]
-        w = C.splice(*w, axis=C.Axis.new_leading_axis() if new_axis else -1)
-        y = stride(w, width)
+        future = [C.sequence.future_value(a, time_step=1 + i) for i in range(width - 1)]
+        frames = C.splice(a, *future, axis=C.Axis.new_leading_axis() if new_axis else -1)
+        y = stride(frames, slide) if slide > 1 else frames
+        return y
+
+    return inner(x)
+
+
+def window_causal(x, width: int, slide: int, new_axis=False, name=''):
+    """ Creates a non-causal window in the sequence tensor. Window contains future values.
+
+    It effectively reduces the sequence length by `slide` factor while increasing tensor dimension by `width` factor.
+    Useful to reduce computation workload in recurrent networks, or to convolution across sequence axis.
+
+    Note:
+        When using `window_causal`, there's a possibility that the last few sequence item might get leftout,
+        compared to using `window` above.
+
+    Graphic:
+        sequence: [0, 1, 2, 3, 4, 5, 6, 7]
+        window(sequence, width=2, slide=2)
+
+        output: [[0, 2, 4, 6]
+                 [0, 1, 3, 5]]
+
+        sequence item 7 gets left out
+
+    Example:
+        width = 2
+        slide = 2
+        a = C.sequence.input_variable(10)
+        b = Cx.sequence.window_causal(a, width, slide)
+
+        assert b.shape == (10 * k, )  # while sequence length reduces by a factor of `slide`
+
+    Arguments:
+        x: input tensor
+        width: width of window
+        slide: striding length along the sequential axis
+        new_axis (bool): whether to concatenate to a new static axis or concatenate to the last axis
+        name (str): name of function
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+        A new sequence tensor with sequence length by `slide` factor with tensor dimension increased by `width` factor
+    """
+    @C.BlockFunction('Sequence::SlidingWindow', name)
+    def inner(a):
+        history = list(reversed([C.sequence.past_value(a, time_step=i + 1) for i in range(width - 1)]))
+        frames = C.splice(*history, a, axis=C.Axis.new_leading_axis() if new_axis else -1)
+        y = stride(frames, slide) if slide > 1 else frames
         return y
 
     return inner(x)

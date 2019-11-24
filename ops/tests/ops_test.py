@@ -1,7 +1,30 @@
 import cntk as C
-from cntkx.ops import cumsum, hardmax, erf, batchmatmul, scalar, gelu, gelu_fast
+from cntkx.ops import cumsum, hardmax, erf, batchmatmul, scalar, gelu, gelu_fast, floor_division, remainder
 import numpy as np
 from numpy.testing import assert_equal
+import pytest
+
+
+def test_floor_division():
+    x = [-3, 1, 2, 3, 4, 5.2]
+    y = [2, 2, 2, 2, 2, 2]
+    a = C.constant(x)
+    b = C.constant(y)
+
+    desired = [i // j for i, j in zip(x, y)]  # [-2, 0, 1, 1, 2, 2]
+    result = floor_division(a, b).eval().tolist()
+    assert result == desired
+
+
+def test_remainder():
+    x = [-3, 1, 2, 3, 4, 3, 5.123]
+    y = [2, 2, 2, 2, 2, -2, -1.234]
+    a = C.constant(x)
+    b = C.constant(y)
+
+    desired = [i % j for i, j in zip(x, y)]  # [1, 1, 0, 1, 0, -1, ...]
+    result = remainder(a, b).eval().tolist()
+    assert pytest.approx(result) == desired
 
 
 def test_scalar():

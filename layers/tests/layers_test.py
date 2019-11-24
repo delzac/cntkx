@@ -3,8 +3,9 @@ import cntkx as Cx
 from cntkx.layers import QRNN, SinusoidalPositionalEmbedding, SpatialPyramidPooling, GatedLinearUnit
 from cntkx.layers import BertEmbeddings, PositionalEmbedding, SequentialAveragePooling
 from cntkx.layers import PreTrainedBertEmbeddings, PositionwiseFeedForward, SequentialMaxPooling
-from cntkx.layers import vFSMN, cFSMN, SequentialConcatPooling
+from cntkx.layers import vFSMN, cFSMN, SequentialConcatPooling, SequentialDense
 import numpy as np
+import math
 
 
 def test_qrnn():
@@ -924,3 +925,63 @@ def test_cfsmn():
          np.random.random((20, in_dim)).astype(np.float32), ]
 
     b.eval({a: n})
+
+
+def test_sequential_dense():
+    # ====================================================
+    # window = 2 stride = 1
+    # ====================================================
+    in_dim = 5
+    out_dim = 10
+    a = C.sequence.input_variable(in_dim)
+    b = Cx.layers.SequentialDense(out_dim, window=2, stride=1, causal=False)(a)
+
+    assert b.shape == (out_dim, )
+
+    n = [np.random.random((15, in_dim)).astype(np.float32),
+         np.random.random((7, in_dim)).astype(np.float32),
+         np.random.random((20, in_dim)).astype(np.float32), ]
+
+    results = b.eval({a: n})
+
+    for r, nn in zip(results, n):
+        assert r.shape == (nn.shape[0], out_dim)
+
+    # ====================================================
+    # window = 2 stride = 2
+    # ====================================================
+    in_dim = 5
+    out_dim = 10
+    a = C.sequence.input_variable(in_dim)
+    b = Cx.layers.SequentialDense(out_dim, window=2, stride=2, causal=False)(a)
+
+    assert b.shape == (out_dim,)
+
+    n = [np.random.random((15, in_dim)).astype(np.float32),
+         np.random.random((7, in_dim)).astype(np.float32),
+         np.random.random((20, in_dim)).astype(np.float32), ]
+
+    results = b.eval({a: n})
+
+    for r, nn in zip(results, n):
+        assert r.shape == (math.ceil(nn.shape[0] / 2), out_dim)
+
+    # ====================================================
+    # window = 3 stride = 3 causal = True
+    # ====================================================
+    in_dim = 5
+    out_dim = 10
+    stride = 3
+    a = C.sequence.input_variable(in_dim)
+    b = Cx.layers.SequentialDense(out_dim, window=3, stride=stride, causal=True)(a)
+
+    assert b.shape == (out_dim,)
+
+    n = [np.random.random((15, in_dim)).astype(np.float32),
+         np.random.random((7, in_dim)).astype(np.float32),
+         np.random.random((20, in_dim)).astype(np.float32), ]
+
+    results = b.eval({a: n})
+
+    for r, nn in zip(results, n):
+        assert r.shape == (math.ceil(nn.shape[0] / stride), out_dim)

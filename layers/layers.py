@@ -273,6 +273,40 @@ def Embedding(shape=None, init=default_override_or(C.glorot_uniform()), weights=
     return embed
 
 
+def SequentialDense(shape, window: int, stride: int, causal: bool = False, activation=default_override_or(identity),
+                    init=default_override_or(C.glorot_uniform()), bias=default_override_or(True),
+                    init_bias=default_override_or(0),
+                    name=''):
+    """ Applies dense to a window of sequence items. Typical Dense applies to every sequence item individually.
+
+    Arguments:
+        shape (`int` or `tuple` of `ints`): vector or tensor dimension of the output of this layer
+        window (int): window size, number of sequence item to apply dense on
+        stride (int): stride of the dense window
+        causal (bool): true if no future information should leak into the past.
+        activation (:class:`~cntk.ops.functions.Function`, defaults to identity): optional function to apply at the end, e.g. `relu`
+        init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): initial value of weights `W`
+        bias (bool, optional, defaults to `True`): the layer will have no bias if `False` is passed here
+        init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
+        name (str, defaults to ''): the name of the function instance in the network
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the operation to it
+
+    """
+    dense = Dense(shape, activation, init, bias=bias, init_bias=init_bias)
+
+    @C.BlockFunction('SequentialDense', name)
+    def inner(x):
+        window_func = Cx.sequence.window_causal if causal else Cx.sequence.window
+        hidden = window_func(x, window, stride)
+        hidden = dense(hidden)
+        return hidden
+
+    return inner
+
+
 def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=False,
          variational_dropout_rate_input=None, variational_dropout_rate_output=None, name=''):
     """
@@ -331,9 +365,8 @@ def QRNN(window: int = 1, hidden_dim=None, activation=C.tanh, return_full_state=
 
         input_sequence = input_tensor
         if window > 1:
-            # to ensure causal relation is still preserved
-            frames = list(reversed([C.sequence.past_value(input_tensor, time_step=i + 1) for i in range(window)]))
-            input_sequence = C.splice(*frames, input_tensor, axis=0)
+            # ensures causal relation is still preserved
+            input_sequence = Cx.sequence.window_causal(input_tensor, window, slide=1)
 
         gate_values = dense(input_sequence)
 

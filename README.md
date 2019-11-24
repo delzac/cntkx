@@ -15,6 +15,8 @@ cntkx only works with `python>=3.6`
 ## Available Components
 | ops | Description |
 | --- | ---|
+| `floor_division` | element-wise floor_division |
+| `remainder` | element-wise remainder of division |
 | `scalar` | cast tensor to scalar (1,) |
 | `cumsum` | Cumulative summation along axis |
 | `upsample` | Upsample by 2x (for image) |
@@ -30,7 +32,8 @@ cntkx only works with `python>=3.6`
 | `sequence.position` | position of every sequence element |
 | `sequence.stride` | strides across sequential axis  |
 | `sequence.join` | joins two sequence along their sequential axis  |
-| `sequence.window` | creates non-overlapping window along the sequence axis  |
+| `sequence.window` | creates sliding window along the sequence axis  |
+| `sequence.window_causal` | creates causal sliding window along the sequence axis  |
 | `sequence.reverse` | reverses the items along the dynamic sequence axis  |
 | `sequence.reduce_mean` | calculates the mean along the dynamic sequence axis  |
 | `sequence.reduce_concat_pool` | drop-in replace for sequence.last  |
@@ -53,6 +56,7 @@ cntkx only works with `python>=3.6`
 | `ScaledDotProductAttention` | Attention used in BERT and Transformer (aka 'attention is all you need') |
 | `MultiHeadAttention` | Attention used in BERT and Transformer (aka 'attention is all you need') |
 | `GaussianWindowAttention` | Windowed attention instead of conventional attention where everything is attended at the same time |
+| `SequentialDense` | Applies Dense to a window of sequence item along sequence axis |
 | `SequentialMaxPooling` | Max pool across sequential axis and static axes |
 | `SequentialAveragePooling` | Average pool across sequential axis and static axes |
 | `SequentialConcatPooling` | Concat Average and Mean pool across sequential axis and static axes |
@@ -111,6 +115,15 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-11-04.***
+#### Added `ops.floor_division`, `ops.remainder`, `sequence.window_causal` and `SequentialDense`
+Add in new operations stated above. `sequence.window` now has an additional argument that lets you control striding.
+`sequence.window_causal` creates causal window that doesn't leak future information into the past (preserve causality).
+`SequentialDense` convenience layer added to apply dense to a window of sequence item,
+much like `SequentialConvolution` but with better memory performance.
+
+
+
 ***2019-11-04.***
 #### Added `SequentialConcatPooling`, `Cx.Sequence.reduce_concat_pool` and `GlobalConcatPooling`
 `Cx.Sequence.reduce_concat_pool` concatenates the last item in the sequence axis with the summarisation

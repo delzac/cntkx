@@ -280,7 +280,7 @@ def PyramidalBiRecurrence(step_fxn_f, step_fxn_b, width, initial_state_f=0, init
     @C.Function
     def inner(x):
         y = C.splice(forward(x), backward(x), axis=-1)
-        z = Cx.sequence.window(y, width)
+        z = Cx.sequence.window(y, width, width)
         return z
 
     return inner

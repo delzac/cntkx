@@ -1,5 +1,6 @@
 import cntk as C
 from cntkx.ops.sequence import length, pad, stride, position, join, window, reverse, reduce_mean, reduce_concat_pool
+from cntkx.ops.sequence import window_causal
 import numpy as np
 
 
@@ -137,7 +138,7 @@ def test_window():
     dim = 1
     k = 2
     a = C.sequence.input_variable(dim)
-    b = window(a, width=k)
+    b = window(a, width=k, slide=k)
 
     assert b.shape == (dim * k, )
 
@@ -156,7 +157,7 @@ def test_window():
     dim = 4
     k = 3
     a = C.sequence.input_variable(dim)
-    b = window(a, width=k)
+    b = window(a, width=k, slide=k)
 
     assert b.shape == (dim * k,)
 
@@ -166,6 +167,47 @@ def test_window():
 
     result = b.eval({a: n})[0]
     desired = np.concatenate((n, m, o), axis=-1)[0, ::k]
+
+    np.testing.assert_equal(result, desired)
+
+
+def test_window_causal():
+    # ====================================================================
+    # window width = 2
+    # ====================================================================
+    seq_length = 20
+    dim = 1
+    k = 2
+    a = C.sequence.input_variable(dim)
+    b = window_causal(a, width=k, slide=k)
+
+    assert b.shape == (dim * k, )
+
+    n = np.random.random((1, seq_length, dim)).astype(np.float32)
+    m = np.pad(n[:, :-1, :], ((0, 0), (1, 0), (0, 0)), mode='constant', constant_values=0,)
+
+    result = b.eval({a: n})[0]
+    desired = np.concatenate((m, n), axis=-1)[0, ::k]
+
+    np.testing.assert_equal(result, desired)
+
+    # ====================================================================
+    # window width = 3
+    # ====================================================================
+    seq_length = 16
+    dim = 4
+    k = 3
+    a = C.sequence.input_variable(dim)
+    b = window_causal(a, width=k, slide=k)
+
+    assert b.shape == (dim * k,)
+
+    n = np.random.random((1, seq_length, dim)).astype(np.float32)
+    m = np.pad(n[:, :-1, :], ((0, 0), (1, 0), (0, 0)), mode='constant', constant_values=0, )
+    o = np.pad(n[:, :-2, :], ((0, 0), (2, 0), (0, 0)), mode='constant', constant_values=0, )
+
+    result = b.eval({a: n})[0]
+    desired = np.concatenate((o, m, n), axis=-1)[0, ::k]
 
     np.testing.assert_equal(result, desired)
 

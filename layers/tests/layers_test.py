@@ -985,3 +985,13 @@ def test_sequential_dense():
 
     for r, nn in zip(results, n):
         assert r.shape == (math.ceil(nn.shape[0] / stride), out_dim)
+
+
+def test_filtered_responsed_normalization_layer():
+    a = C.input_variable((3, 32, 32))
+    b = Cx.layers.FilterResponseNormalization()(a)
+
+    assert b.shape == (3, 32, 32)
+
+    n = np.random.random((10, 3, 32, 32)).astype(np.float32)
+    results = b.eval({a: n})

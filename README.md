@@ -64,6 +64,7 @@ cntkx only works with `python>=3.6`
 | `cFSMN` | Compact Feedforward Sequential Memory Networks |
 | `BiRecurrence` | BiRecurrence recurrent layer with weight tying option to half parameter requirement |
 | `GlobalConcatPooling` | Global spatial concat pooling of ave and mean |
+|`FilteredResponseNormalization`| Drop in replacement for batch norm with superior performance |
 
 | Blocks | Description |
 | --- | ---|
@@ -115,6 +116,25 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2019-12-03.***
+#### Added `FilterResponseNormalization` and `ThresholdedLinearUnit`
+Added cntk implementation of `FilteredResponseNormalization`. Filter Response Normalization (FRN) layer 
+is a novel combination of a normalization and an activation function,
+that can be used as a drop-in replacement for other normalizations and activations.
+
+The method operates on each activation map of each batch sample
+independently, eliminating the dependency on other batch samples or channels of the same sample.
+The method outperforms BN and all alternatives in a variety of settings for all batch sizes.
+FRN layer performs ≈0.7−1.0% better on top-1 validation accuracy than BN with large mini-batch sizes on
+Imagenet classification on InceptionV3 and ResnetV2-50 architectures. Further, it performs >1% better
+than GN on the same problem in the small mini-batch size regime. For object detection problem on COCO dataset,
+FRN layer outperforms all other methods by at least 0.3−0.5% in all batch size regimes.
+
+Please refer to the paper [Filter Response Normalization Layer: Eliminating Batch Dependence 
+in the Training of Deep Neural Networks](https://arxiv.org/abs/1911.09737v1) for more details .
+
+
+
 ***2019-11-04.***
 #### Added `ops.floor_division`, `ops.remainder`, `sequence.window_causal` and `SequentialDense`
 Add in new operations stated above. `sequence.window` now has an additional argument that lets you control striding.

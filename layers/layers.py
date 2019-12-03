@@ -1665,3 +1665,66 @@ def cFSMN(shape, proj_dim, activation, num_past_context, num_future_context, inp
         return r
 
     return inner
+
+
+def ThresholdedLinearUnit(name=''):
+    """ Thresholded Linear Unit - a learnable activation function
+    tlu is defined as max(x, tau), where tau is a learnable parameter
+
+    Arguments:
+        x: input_tensor
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+    """
+    tau = C.Parameter(shape=(-1,), init=0, name='tau')
+
+    @C.BlockFunction('Tlu', name)
+    def inner(x):
+        return C.element_max(x, tau * C.ones_like(x))
+
+    return inner
+
+
+def FilterResponseNormalization(init_scale=1, name=''):
+    """ Drop in replacement for BatchNormalization. It will provide superior performance.
+
+    Filter Response Normalization (FRN) layer is a novel combination of a normalization and an activation function,
+    that can be used as a drop-in replacement for other normalizations and activations.
+    The method operates on each activation map of each batch sample
+    independently, eliminating the dependency on other batch samples or channels of the same sample.
+    The method outperforms BN and all alternatives in a variety of settings for all batch sizes.
+    FRN layer performs ≈0.7−1.0% better on top-1 validation accuracy than BN with large mini-batch sizes on
+    Imagenet classification on InceptionV3 and ResnetV2-50 architectures. Further, it performs >1% better
+    than GN on the same problem in the small mini-batch size regime. For object detection problem on COCO dataset,
+    FRN layer outperforms all other methods by at least 0.3−0.5% in all batch size regimes.
+
+    Please refer to the paper "Filter Response Normalization Layer: Eliminating Batch Dependence
+    in the Training of Deep Neural Networks" (https://arxiv.org/abs/1911.09737v1)
+
+    Note:
+        assumes that the static axes are arrange in (C, H, W) or (C, W, H)
+
+    Arguments:
+        init_scale (float): initial value of scale
+        name (str, defaults to ''): the name of the function instance in the network
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the operation to it
+    """
+    gamma = C.Parameter(shape=(-1,), init=init_scale, name='gamma')
+    bias = C.Parameter(shape=(-1,), init=0, name='bias')
+    tlu = ThresholdedLinearUnit()
+
+    @C.BlockFunction('FilteredResponseNormalization', name)
+    def inner(x):
+        e = C.Constant(0.000000001)
+        v2 = C.reduce_mean(x * x, axis=[1, 2])
+        xhat = x / C.sqrt(v2 + e)
+        y = gamma * xhat + bias  # denormalize with learned parameters
+        z = tlu(y)
+        return z
+
+    return inner

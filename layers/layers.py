@@ -1718,7 +1718,7 @@ def FilterResponseNormalization(init_scale=1, name=''):
     bias = C.Parameter(shape=(-1,), init=0, name='bias')
     tlu = ThresholdedLinearUnit()
 
-    @C.BlockFunction('FilteredResponseNormalization', name)
+    @C.BlockFunction('FilterResponseNormalization', name)
     def inner(x):
         e = C.Constant(0.000000001)
         v2 = C.reduce_mean(x * x, axis=[1, 2])

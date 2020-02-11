@@ -65,6 +65,7 @@ cntkx only works with `python>=3.6`
 | `BiRecurrence` | BiRecurrence recurrent layer with weight tying option to half parameter requirement |
 | `GlobalConcatPooling` | Global spatial concat pooling of ave and mean |
 |`FilterResponseNormalization`| Drop in replacement for batch norm with superior performance |
+|`Boom`| More parametrically efficient alternative to Position-Wise FeedForward layer found in Transformer |
 
 | Blocks | Description |
 | --- | ---|
@@ -116,6 +117,16 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2020-02-11.***
+#### Added `Boom`
+Boom layer from SHA-RNN by S. Merity creator of QRNN. Alternative to PositionwiseFeedForward. Serves the same function as
+PositionwiseFeedForward found in transformer.
+
+Boom layer minimizes computation and removes an entire matrix of parameters compared to traditional down-projection layers.
+
+For more detail please read: [Single Headed Attention RNN: Stop Thinking With Your Head](https://arxiv.org/abs/1911.11423) by Stephen Merity.
+
+
 ***2019-12-03.***
 #### Added `FilterResponseNormalization` and `ThresholdedLinearUnit`
 Added cntk implementation of `FilterResponseNormalization`. Filter Response Normalization (FRN) layer 

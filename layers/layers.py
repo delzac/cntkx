@@ -1728,3 +1728,39 @@ def FilterResponseNormalization(init_scale=1, name=''):
         return z
 
     return inner
+
+
+def Boom(output_dim: int, expansion_factor: int):
+    """ Boom layer from SHA-RNN by S. Merity creator of QRNN
+    Alternative to PositionwiseFeedForward. Serves the same function as
+    PositionwiseFeedForward found in transformer.
+
+    This minimizes computation and removes an entire matrix
+    of parameters compared to traditional down-projection layers.
+
+    For more detail please read: Single Headed Attention RNN: Stop Thinking With Your Head by Stephen Merity.
+    https://arxiv.org/abs/1911.11423
+
+    Arguments:
+        output_dim (int): desired output dimension
+        expansion_factor (int): control how large the inner dimension would be.
+          Inner dimension = output_dim * expansion factor.
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the operation to it
+
+    """
+    dense = Dense(output_dim * expansion_factor, activation=Cx.gelu)
+
+    def inner(x):
+        hidden = dense(x)
+        vectors = [C.slice(hidden, 0, i * output_dim, (i + 1) * output_dim) for i in range(expansion_factor)]
+
+        output = None
+        for vector in vectors:
+            output = output + vector if output is not None else vector
+
+        return output
+
+    return inner

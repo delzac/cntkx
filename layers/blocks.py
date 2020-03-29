@@ -12,6 +12,7 @@ e.g. the LSTM block.
 from __future__ import division
 import numpy as np
 import cntk as C
+from cntkx.ops import split
 from cntk.layers import Stabilizer, SentinelValueForAutoSelectRandomSeed
 from cntk.variables import Constant, Parameter
 from cntk.ops import times, slice, sigmoid, tanh, relu
@@ -385,3 +386,38 @@ def LSTM(shape, activation=default_override_or(tanh), weight_drop_rate=None,
         return ht, ct
 
     return lstm
+
+
+def GroupLSTM(shape, groups=2, activation=default_override_or(tanh),
+              init=default_override_or(glorot_uniform()), init_bias=default_override_or(0),
+              enable_self_stabilization=default_override_or(False), name=''):
+
+    assert isinstance(shape, int)
+
+    if shape % groups:
+        raise ValueError(f"shape ({shape}) must be divisible by groups ({groups})")
+
+    lstms = [C.layers.LSTM(shape // groups, activation=activation, init=init, init_bias=init_bias, enable_self_stabilization=enable_self_stabilization) for __ in range(groups)]
+
+    @C.BlockFunction('GroupLSTM', name)
+    def group_lstm(dh, dc, x):
+
+        x_grps = split(x, groups).outputs
+        dh_grps = split(dh, groups).outputs
+        dc_grps = split(dc, groups).outputs
+
+        h_grps = []
+        c_grps = []
+
+        for lstm, h_grp, c_grp, x_grp in zip(lstms, dh_grps, dc_grps, x_grps):
+            h, c = lstm(h_grp, c_grp, x_grp).outputs
+            h_grps.append(h)
+            c_grps.append(c)
+
+        # inter-group correlation through permutation of dimensions
+        h_output = C.reshape(C.swapaxes(C.reshape(C.splice(*h_grps), (groups, shape // groups))), (shape,))
+        c_output = C.reshape(C.swapaxes(C.reshape(C.splice(*c_grps), (groups, shape // groups))), (shape,))
+
+        return h_output, c_output
+
+    return group_lstm

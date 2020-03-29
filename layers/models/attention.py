@@ -39,37 +39,8 @@ def ScaledDotProductAttention(obey_sequence_order: bool = None, max_seq_len: int
 
     """
 
-    @C.BlockFunction('ScaledDotProductAttention', name)
     def attention(query, key, value):
-        dk = C.reduce_sum(C.ones_like(query))  # cannot use sequence.last, will conflict with recurrence
-        # dk: [#, *] [1, ] and value = int(dim_of_query)
-
-        unpacked_key = C.sequence.unpack(key, padding_value=0, no_mask_output=True)  # [#] [-3, key_dim]
-        unpacked_value = C.sequence.unpack(value, padding_value=0, no_mask_output=True)  # [#] [-3, value_dim]
-
-        broadcasted_key = C.sequence.broadcast_as(unpacked_key, query)  # [#, *] [-3, key_dim]
-        scaled = C.times_transpose(query, broadcasted_key) / dk
-        # [#, *] [q_dim] @ [#, *] [key_dim, -3], assert q_dim == key_dim
-        # scaled: [#, *] [-3, ] => for every key seq element, there is a corresponding score
-
-        # masked out invalid temporal connections to obey_sequence_order
-        if obey_sequence_order and max_seq_len:
-            unpacked_scaled, scaled_mask = C.sequence.unpack(scaled, padding_value=0).outputs
-            # unpacked_scaled: [#] [-3, -3]  <== matrix will be top right diagonally zero-ed
-            # scaled_mask: [#] [-3,]
-
-            minus_inf = C.constant(-1e+30)
-            valid_connections = C.Constant(np.tril(np.ones((max_seq_len, max_seq_len)), k=0))  # [] [max_seq, max_seq]
-            valid_connections = C.reconcile_dynamic_axes(valid_connections, unpacked_scaled)  # [#] [max_seq, max_seq]
-            valid_connections = C.crop_manual(valid_connections, unpacked_scaled, 0, 0)  # [#] [-3, -3]
-            unpacked_scaled = C.element_select(valid_connections, unpacked_scaled, minus_inf)  # [#] [-3, -3]
-            scaled = C.to_sequence_like(unpacked_scaled, query)  # [#, *] [-3]
-
-        elif obey_sequence_order and not max_seq_len:
-            raise ValueError("max_seq_len must be defined when obey_sequence_order is True")
-
-        attended = C.times(C.softmax(scaled, axis=-1), C.sequence.broadcast_as(unpacked_value, query))  # [#, *] [value_dim,]
-        return attended
+        return Cx.scaled_dot_product_attention(query, key, value, obey_sequence_order, max_seq_len, name)
 
     return attention
 
@@ -548,7 +519,7 @@ def GaussianWindowAttention(nb_mixtures):
 
         encoded_unpacked = C.sequence.unpack(encoded, padding_value=0, no_mask_output=True)
         # context_unpacked: [#] [*=c, char_ohe]
-        u = Cx.sequence.position(encoded)
+        u = C.expand_dims(Cx.sequence.position(encoded), axis=-1)  # position gives shape=(), expand_dims to (1,)
         # u: [#, c], [1]
         u_values, u_valid = C.sequence.unpack(u, padding_value=0).outputs
         # u_values: [#] [*=c]

@@ -91,3 +91,27 @@ def test_binary_focal_loss_image():
     bfl = Cx.binary_focal_loss(output, target, alpha=1, gamma=0).eval({output: o, target: t})
 
     np.testing.assert_almost_equal(bce, bfl, decimal=2)
+
+
+def test_adaptive_robust_baron_loss():
+    a = C.input_variable(10)
+    b = C.input_variable(10)
+
+    c = Cx.adaptive_robust_barron_loss(a, b)
+
+    assert c.shape == (10, )
+
+    n1 = np.random.random((1, 10)).astype(np.float32)
+    n2 = np.random.random((1, 10)).astype(np.float32)
+    c.eval({a: n1, b: n2})
+
+    a = C.input_variable((5, 10))
+    b = C.input_variable(10)
+
+    c = Cx.adaptive_robust_barron_loss(a, b)
+
+    assert c.shape == (5, 10,)
+
+    n1 = np.random.random((1, 5, 10)).astype(np.float32)
+    n2 = np.random.random((1, 10)).astype(np.float32)
+    c.eval({a: n1, b: n2})

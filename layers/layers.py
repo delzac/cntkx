@@ -1730,7 +1730,7 @@ def FilterResponseNormalization(init_scale=1, name=''):
     return inner
 
 
-def Boom(output_dim: int, expansion_factor: int, activation=Cx.gelu, init=C.he_normal()):
+def Boom(output_dim: int, expansion_factor: int, activation=Cx.gelu, init=C.he_normal(), name=''):
     """ Boom layer from SHA-RNN by S. Merity creator of QRNN
     Alternative to PositionwiseFeedForward. Serves the same function as
     PositionwiseFeedForward found in transformer.
@@ -1754,6 +1754,7 @@ def Boom(output_dim: int, expansion_factor: int, activation=Cx.gelu, init=C.he_n
     """
     dense = Dense(output_dim * expansion_factor, activation=activation, init=init)
 
+    @C.BlockFunction('Boom', name)
     def inner(x):
         hidden = dense(x)
         hidden = C.reshape(hidden, (output_dim, expansion_factor))

@@ -1,7 +1,6 @@
 import cntk as C
 
 
-# @C.typemap
 def sample(x, axis=-1, name=''):
     """ Sample an unnormalised log-prob distribution and returns a one hot encode vector
 
@@ -23,7 +22,29 @@ def sample(x, axis=-1, name=''):
     return inner(x)
 
 
-# @C.typemap
+def sample_with_bias(x, axis: int = -1, bias: float = 0.5, name=''):
+    """ Sample an unnormalised log-prob distribution with bias and returns a one hot encode vector
+
+    Arguments:
+        x: input tensor
+        bias (float): the larger the value, the more likely the most probable outcome/class will be sampled.
+          Positive log-pro will be larger and negative log-pro will be smaller. (possible values: 0.5)
+        name (str): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+
+    """
+    if bias is None:
+        raise ValueError(f"bias must be a float. The larger the value, the more likely the most probable outcome/class will be sampled")
+
+    @C.BlockFunction('Random::SampleWithBias', name=name)
+    def inner(a):
+        return sample(a * (1 + bias), axis)
+
+    return inner(x)
+
+
 def sample_top_k(x, k, num_classes, axis=-1, name=''):
     """ Sample once from the top_k unnormalised log-prob distribution of `x` and returns a one hot encoded vector.
 

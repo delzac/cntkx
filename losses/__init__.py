@@ -188,3 +188,35 @@ def cross_entropy_with_softmax(output_vector, target_vector, axis=-1, label_smoo
         k = output_vector.shape[axis]
         target_vector = (1 - label_smoothing) * target_vector + label_smoothing / k
         return C.cross_entropy_with_softmax(output_vector, target_vector, axis=axis, name=name)
+
+
+def adaptive_robust_barron_loss(output_vector, target_vector, epsilon: float = 1e-6):
+    """ Drop-in replacement for any loss function that uses l1 or L2 norm or any regression task.
+
+    By introducing robustness as a continuous parameter, our loss function allows algorithms
+    built around robust loss minimization to be generalized, which improves performance on
+    basic vision tasks such as registration and clustering.
+
+    This implements the rho(x, \alpha, c) function described in
+    "A General and Adaptive Robust Loss Function", Jonathan T. Barron, https://arxiv.org/abs/1701.03077
+
+    The approximate form of the loss which is faster to compute, but inaccurate
+    when the difference between `output_vector` and `target_vector`  and alpha are near zero.
+
+    Arguments:
+        output_vector: tensor (assumes last axis is the dimension axis where the loss is to be computed from)
+        target_vector: tensor
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+    """
+    alpha = C.Parameter(shape=(output_vector.shape[-1],), init=C.glorot_uniform())
+    scale = C.Parameter(shape=(output_vector.shape[-1],), init=C.glorot_uniform())
+    alpha_negative = C.less(alpha, 0)
+
+    x = output_vector - target_vector
+
+    b = C.abs(alpha - 2) + epsilon
+    d = C.element_select(alpha_negative, alpha - epsilon, alpha + epsilon)
+    loss = (b / d) * (C.pow(C.square(x / scale) / b + 1., 0.5 * d) - 1.)
+    return loss

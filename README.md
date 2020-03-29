@@ -38,6 +38,7 @@ cntkx only works with `python>=3.6`
 | `sequence.reduce_mean` | calculates the mean along the dynamic sequence axis  |
 | `sequence.reduce_concat_pool` | drop-in replace for sequence.last  |
 | `random.sample` | Samples an unnormalised log probability distribution |
+| `random.sample_with_bias` | Samples an unnormalised log probability distribution over-weighted to more probable classes |
 | `random.sample_top_k` | Samples from the top_k of an unnormalised log probability distribution |
 | `batchmatmul` | Batch Matrix Multiplication on a static batch axis, similar to tf.matmul |
 
@@ -78,6 +79,7 @@ cntkx only works with `python>=3.6`
 | `gaussian_mdn_loss` | loss function when using Mixture density network |
 | `focal_loss_with_softmax` | A kind of cross entropy that handles extreme class imbalance |
 | `cross_entropy_with_softmax` | Added `label smoothing regularisation` in cross entropy with softmax |
+| `adaptive_robust_barron_loss` | drop-in replacement for l1 or l2 loss |
 
 | Models | Description |
 | --- | ---|
@@ -117,6 +119,23 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2020-03-29.***
+#### Added `adaptive_robust_barron_loss` and `sample_with_bias`
+`adaptive_robust_barron_loss` is a generalisation for generalization of the Cauchy/Lorentzian,
+Geman-McClure, Welsch/Leclerc, generalized Charbonnier, Charbonnier/pseudo-Huber/L1-L2, and
+L2 loss functions.
+
+Can be used as a drop-in replacement in any regression task that you have.
+
+For more details, please refer to [A General and Adaptive Robust Loss Function](https://arxiv.org/abs/1701.03077), Jonathan T. Barron, 
+It is the Best Paper Award Finalist in CVPR 2019.
+
+
+Implemented `sample_with_bias` to sample more likely classes as a replacement 
+for `sample_top_k` which cannot be used inside a `UnfoldFrom`
+
+
+
 ***2020-02-11.***
 #### Added `Boom`
 Boom layer from SHA-RNN by S. Merity creator of QRNN. Alternative to PositionwiseFeedForward. Serves the same function as

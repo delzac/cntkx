@@ -41,6 +41,33 @@ def floor_division(left, right, name=''):
 ##########################################################################
 # linear ops
 ##########################################################################
+def split(x, n: int, name=""):
+    """ Split tensor `x` into n equal tensors. Dimensions of `x` must be divisible by `n`
+
+    Examples:
+        a = C.input_variable(9)
+        b, c, d = Cx.split(a, 3).outputs
+
+        assert b.shape == c.shape == d.shape == (9 // 3, )
+
+    Arguments:
+        x: input tensor, must be flattened (i.e. single dimension axis)
+        n: number of groups to split tensor into
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+
+    """
+
+    @C.BlockFunction('Split', name)
+    def inner(a):
+        b = C.reshape(a, (n, -1))
+        return tuple(C.squeeze(b[i]) for i in range(n))
+
+    return inner(x)
+
+
 def remainder(left, right, name=''):
     """ Computes the element-wise remainder of division. Behaves like % operator in python.
 
@@ -194,7 +221,7 @@ def batchmatmul(left, right, output_rank=1, infer_input_rank_to_map=C.TIMES_NO_I
     return _inject_name(result_packed, name)
 
 
-def upsample(x):
+def upsample(x, factor: int):
     """ Up sample image by a factor of 2 using nearest neighbour.
 
     Example:
@@ -210,10 +237,14 @@ def upsample(x):
         :class:`~cntk.ops.functions.Function`
 
     """
-    xr = C.reshape(x, (x.shape[0], x.shape[1], 1, x.shape[2], 1))
-    xx = C.splice(xr, xr, axis=-1)  # axis=-1 refers to the last axis
-    xy = C.splice(xx, xx, axis=-3)  # axis=-3 refers to the middle axis
-    r = C.reshape(xy, (x.shape[0], x.shape[1] * 2, x.shape[2] * 2))
+    # old implementation for upsample by factor 2
+    # xr = C.reshape(x, (x.shape[0], x.shape[1], 1, x.shape[2], 1))
+    # xx = C.splice(xr, xr, axis=-1)  # axis=-1 refers to the last axis
+    # xy = C.splice(xx, xx, axis=-3)  # axis=-3 refers to the middle axis
+    # r = C.reshape(xy, (x.shape[0], x.shape[1] * 2, x.shape[2] * 2))
+
+    xx = C.splice(*[x for __ in range(factor * 2)], axis=0)
+    r = C.depth_to_space(xx, factor)
     return r
 
 
@@ -409,6 +440,73 @@ def gelu_fast(x, name=''):
         return a * C.sigmoid(1.702 * a)
 
     return inner(x)
+
+
+def scaled_dot_product_attention(query, key, value, obey_sequence_order: bool = None, max_seq_len: int = None, name=''):
+    """
+    Scaled dot-product attention implementation of "Attention is all you need", https://arxiv.org/abs/1706.03762
+
+    An attention function can be described as mapping a query and a set of key-value pairs to an output,
+    where the query, keys, values, and output are all vectors. The output is computed as a weighted sum
+    of the values, where the weight assigned to each value is computed by a compatibility function of the
+    query with the corresponding key.
+
+    scaled_dot_product_attention(Q, K, V) = softmax(QV.T / sqrt(dk)) * V
+
+    When query, key and value are all the same, it becomes self-attention.
+
+    Note:
+        Query and key must have the same dimension
+        Key and value must have the same sequence length
+
+    Example:
+        a = C.sequence.input_variable(10)
+        b = ScaledDotProductAttention()(a, a, a)
+
+        assert b.shape == (10, )
+
+        obey_sequence_order: do not let attention peek into future values
+        max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+        A function that returns a weighted sum of value
+
+    """
+
+    @C.BlockFunction('ScaledDotProductAttention', name)
+    def attention(query, key, value):
+        dk = C.reduce_sum(C.ones_like(query))  # cannot use sequence.last, will conflict with recurrence
+        # dk: [#, *] [1, ] and value = int(dim_of_query)
+
+        unpacked_key = C.sequence.unpack(key, padding_value=0, no_mask_output=True)  # [#] [-3, key_dim]
+        unpacked_value = C.sequence.unpack(value, padding_value=0, no_mask_output=True)  # [#] [-3, value_dim]
+
+        broadcasted_key = C.sequence.broadcast_as(unpacked_key, query)  # [#, *] [-3, key_dim]
+        scaled = C.times_transpose(query, broadcasted_key) / dk
+        # [#, *] [q_dim] @ [#, *] [key_dim, -3], assert q_dim == key_dim
+        # scaled: [#, *] [-3, ] => for every key seq element, there is a corresponding score
+
+        # masked out invalid temporal connections to obey_sequence_order
+        if obey_sequence_order and max_seq_len:
+            unpacked_scaled, scaled_mask = C.sequence.unpack(scaled, padding_value=0).outputs
+            # unpacked_scaled: [#] [-3, -3]  <== matrix will be top right diagonally zero-ed
+            # scaled_mask: [#] [-3,]
+
+            minus_inf = C.constant(-1e+30)
+            valid_connections = C.Constant(np.tril(np.ones((max_seq_len, max_seq_len)), k=0))  # [] [max_seq, max_seq]
+            valid_connections = C.reconcile_dynamic_axes(valid_connections, unpacked_scaled)  # [#] [max_seq, max_seq]
+            valid_connections = C.crop_manual(valid_connections, unpacked_scaled, 0, 0)  # [#] [-3, -3]
+            unpacked_scaled = C.element_select(valid_connections, unpacked_scaled, minus_inf)  # [#] [-3, -3]
+            scaled = C.to_sequence_like(unpacked_scaled, query)  # [#, *] [-3]
+
+        elif obey_sequence_order and not max_seq_len:
+            raise ValueError("max_seq_len must be defined when obey_sequence_order is True")
+
+        attended = C.times(C.softmax(scaled, axis=-1), C.sequence.broadcast_as(unpacked_value, query))  # [#, *] [value_dim,]
+        return attended
+
+    return attention(query, key, value)
 
 
 ##########################################################################

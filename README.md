@@ -132,7 +132,7 @@ It is the Best Paper Award Finalist in CVPR 2019.
 
 
 Implemented `sample_with_bias` to sample more likely classes as a replacement 
-for `sample_top_k` which cannot be used inside a `UnfoldFrom`
+for `sample_top_k` which cannot be used inside a `UnfoldFrom`. `sample_with_bias` reduces sampling variance especially when you have a long tail.
 
 
 

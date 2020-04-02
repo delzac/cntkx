@@ -5,7 +5,7 @@ def sample(x, axis=-1, name=''):
     """ Sample an unnormalised log-prob distribution and returns a one hot encode vector
 
     Arguments:
-        x: input tensor
+        x: input tensor (not softmax-ed)
         name (str): the name of the Function instance in the network
 
     Returns:
@@ -25,10 +25,13 @@ def sample(x, axis=-1, name=''):
 def sample_with_bias(x, axis: int = -1, bias: float = 0.5, name=''):
     """ Sample an unnormalised log-prob distribution with bias and returns a one hot encode vector
 
+    Adding a bias helps reduce variance in the sampling, making more probable outcomes even more likely to be sampled.
+    This can be taken as a simplified top-k/nucleus sampling replacement.
+
     Arguments:
-        x: input tensor
+        x: input tensor (not softmax-ed)
         bias (float): the larger the value, the more likely the most probable outcome/class will be sampled.
-          Positive log-pro will be larger and negative log-pro will be smaller. (possible values: 0.5)
+          Positive log-pro will be larger and negative log-pro will be smaller. (default values: 0.5)
         name (str): the name of the Function instance in the network
 
     Returns:

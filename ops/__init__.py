@@ -476,7 +476,7 @@ def scaled_dot_product_attention(query, key, value, obey_sequence_order: bool = 
 
     @C.BlockFunction('ScaledDotProductAttention', name)
     def attention(query, key, value):
-        dk = C.reduce_sum(C.ones_like(query))  # cannot use sequence.last, will conflict with recurrence
+        dk = C.sqrt(C.reduce_sum(C.ones_like(query)))  # cannot use sequence.last, will conflict with recurrence
         # dk: [#, *] [1, ] and value = int(dim_of_query)
 
         unpacked_key = C.sequence.unpack(key, padding_value=0, no_mask_output=True)  # [#] [-3, key_dim]

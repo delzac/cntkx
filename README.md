@@ -19,7 +19,7 @@ cntkx only works with `python>=3.6`
 | `remainder` | element-wise remainder of division |
 | `scalar` | cast tensor to scalar (1,) |
 | `cumsum` | Cumulative summation along axis |
-| `upsample` | Upsample by 2x (for image) |
+| `upsample` | Upsample by k factor (for image) |
 | `centre_crop` | Crop centre of image |
 | `swish` | Activation |
 | `mish` | Activation |

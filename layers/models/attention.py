@@ -451,6 +451,10 @@ def GaussianWindowAttention(nb_mixtures):
 
     For more details, the paper can be found in https://arxiv.org/abs/1308.0850
 
+    NOTE:
+        There is some deviattion from the original implementation where instead of using exp activation function
+        to keep a, b and k to be a non negative number, i use Relu. Relu improves the stability of the attention.
+
     Example:
         seq1 = C.Axis.new_unique_dynamic_axis('seq1')
         seq2 = C.Axis.new_unique_dynamic_axis('seq2')
@@ -469,7 +473,7 @@ def GaussianWindowAttention(nb_mixtures):
         :class:`~cntk.ops.functions.Function`:
 
     """
-    dense = Dense(shape=3 * nb_mixtures, activation=None, init=C.normal(0.075), name="GravesAttention")
+    dense = Dense(shape=3 * nb_mixtures, activation=C.relu, init=C.he_normal(), name="GravesAttention")
 
     def window_weight(a, b, k, u):
         """
@@ -499,9 +503,9 @@ def GaussianWindowAttention(nb_mixtures):
     @C.typemap
     def gaussian_windows_attention_coefficients(abk, nb_mixtures):
         """ Split into 3 equal tensor of dim nb_mixtures """
-        a = C.exp(C.slice(abk, 0, 0, nb_mixtures))
-        b = C.exp(C.slice(abk, 0, nb_mixtures, 2 * nb_mixtures))
-        k = C.exp(C.slice(abk, 0, 2 * nb_mixtures, 0))
+        a = C.slice(abk, 0, 0, nb_mixtures)
+        b = C.slice(abk, 0, nb_mixtures, 2 * nb_mixtures)
+        k = C.slice(abk, 0, 2 * nb_mixtures, 0)
         k = Recurrence(C.plus)(k)
 
         a = C.expand_dims(a, axis=-1)

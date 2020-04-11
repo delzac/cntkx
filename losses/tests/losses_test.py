@@ -94,24 +94,27 @@ def test_binary_focal_loss_image():
 
 
 def test_adaptive_robust_baron_loss():
-    a = C.input_variable(10)
-    b = C.input_variable(10)
+    alphas = [2, 1.5, 1, 0.5, 0, -0.5, -2, -1e10]
+    for alpha in alphas:
+        scale = 1
+        a = C.input_variable(10)
+        b = C.input_variable(10)
 
-    c = Cx.adaptive_robust_barron_loss(a, b)
+        c = Cx.generalised_robust_barron_loss(a, b, alpha, scale)
 
-    assert c.shape == (10, )
+        assert c.shape == (10, )
 
-    n1 = np.random.random((1, 10)).astype(np.float32)
-    n2 = np.random.random((1, 10)).astype(np.float32)
-    c.eval({a: n1, b: n2})
+        n1 = np.random.random((1, 10)).astype(np.float32)
+        n2 = np.random.random((1, 10)).astype(np.float32)
+        c.eval({a: n1, b: n2})
 
-    a = C.input_variable((5, 10))
-    b = C.input_variable(10)
+        a = C.input_variable((5, 10))
+        b = C.input_variable(10)
 
-    c = Cx.adaptive_robust_barron_loss(a, b)
+        c = Cx.generalised_robust_barron_loss(a, b, alpha, scale)
 
-    assert c.shape == (5, 10,)
+        assert c.shape == (5, 10,)
 
-    n1 = np.random.random((1, 5, 10)).astype(np.float32)
-    n2 = np.random.random((1, 10)).astype(np.float32)
-    c.eval({a: n1, b: n2})
+        n1 = np.random.random((1, 5, 10)).astype(np.float32)
+        n2 = np.random.random((1, 10)).astype(np.float32)
+        c.eval({a: n1, b: n2})

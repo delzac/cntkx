@@ -79,7 +79,7 @@ cntkx only works with `python>=3.6`
 | `gaussian_mdn_loss` | loss function when using Mixture density network |
 | `focal_loss_with_softmax` | A kind of cross entropy that handles extreme class imbalance |
 | `cross_entropy_with_softmax` | Added `label smoothing regularisation` in cross entropy with softmax |
-| `adaptive_robust_barron_loss` | drop-in replacement for l1 or l2 loss |
+| `generalised_robust_barron_loss` | generalised robust loss |
 
 | Models | Description |
 | --- | ---|
@@ -120,14 +120,15 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 ## News
 ***2020-03-29.***
-#### Added `adaptive_robust_barron_loss` and `sample_with_bias`
-`adaptive_robust_barron_loss` is a generalisation for generalization of the Cauchy/Lorentzian,
+#### Added `generalised_robust_barron_loss` and `sample_with_bias`
+`generalised_robust_barron_loss` is a generalisation for generalization of the Cauchy/Lorentzian,
 Geman-McClure, Welsch/Leclerc, generalized Charbonnier, Charbonnier/pseudo-Huber/L1-L2, and
 L2 loss functions.
 
 Can be used as a drop-in replacement in any regression task that you have.
 
-For more details, please refer to [A General and Adaptive Robust Loss Function](https://arxiv.org/abs/1701.03077), Jonathan T. Barron, 
+For more details, please refer to [A General and Adaptive Robust Loss Function](https://arxiv.org/abs/1701.03077), Jonathan T. Barron,
+or this [video](https://www.youtube.com/watch?v=BmNKbnF69eY).
 It is the Best Paper Award Finalist in CVPR 2019.
 
 

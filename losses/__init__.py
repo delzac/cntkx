@@ -190,8 +190,8 @@ def cross_entropy_with_softmax(output_vector, target_vector, axis=-1, label_smoo
         return C.cross_entropy_with_softmax(output_vector, target_vector, axis=axis, name=name)
 
 
-def adaptive_robust_barron_loss(output_vector, target_vector, epsilon: float = 1e-6):
-    """ Drop-in replacement for any loss function that uses l1 or L2 norm or any regression task.
+def generalised_robust_barron_loss(output_vector, target_vector, alpha: float, scale: float):
+    """ Generalised robust loss that can be used as replacement to either l1 or L2 norm or any regression task.
 
     By introducing robustness as a continuous parameter, our loss function allows algorithms
     built around robust loss minimization to be generalized, which improves performance on
@@ -199,24 +199,68 @@ def adaptive_robust_barron_loss(output_vector, target_vector, epsilon: float = 1
 
     This implements the rho(x, \alpha, c) function described in
     "A General and Adaptive Robust Loss Function", Jonathan T. Barron, https://arxiv.org/abs/1701.03077
+    View is video on this talk https://www.youtube.com/watch?v=BmNKbnF69eY
 
     The approximate form of the loss which is faster to compute, but inaccurate
     when the difference between `output_vector` and `target_vector`  and alpha are near zero.
 
+    Different alpha allows you to get various forms of robust loss:
+        alpha = 2: L2 loss
+        alpha = 1: pseudo-Huber loss
+        alpha = 0: Cauchy loss
+        alpha = -2: Geman-McClure loss
+        alpha = -inf: Welsch loss
+
+    The effect of outlier diminishes as alpha becomes more negative, and as alpha approaches -inf an
+    outlier whose residual magnitude is larger than 3 * scale is almost completely ignored.
+
+    This generalised loss for all alpha has the following properties:
+        Monotonic (useful for annealing)
+        Smooth wrt inputs and alpha
+        Bounded first and second derivatives
+
+    Note:
+        this is NOT the adaptive implementation of barron loss, which is slightly more complicated to implement,
+        since it uses cubic spline interpolation to estimate the partition function.
+
+        I may implement it once i have time.
+
     Arguments:
         output_vector: tensor (assumes last axis is the dimension axis where the loss is to be computed from)
         target_vector: tensor
+        alpha (float): controls the form that the loss takes.The effect of outlier diminishes as alpha becomes more
+          negative, and as alpha approaches -inf an outlier whose residual magnitude is larger than 3 * scale
+          is almost completely ignored.
+        scale (float): controls the size of the loss's quadratic bowl near x = 0, the derivative of the loss is
+          approximately linear when |x| < scale.
 
     Returns:
         :class:`~cntk.ops.functions.Function`
     """
-    alpha = C.Parameter(shape=(output_vector.shape[-1],), init=C.glorot_uniform())
-    scale = C.Parameter(shape=(output_vector.shape[-1],), init=C.glorot_uniform())
-    alpha_negative = C.less(alpha, 0)
+    # alpha = C.Parameter(shape=(output_vector.shape[-1],), init=C.glorot_uniform())
+    # scale = C.Parameter(shape=(output_vector.shape[-1],), init=C.glorot_uniform())
+    # alpha_negative = C.less(alpha, 0)
+    #
+    # x = output_vector - target_vector
+    #
+    # b = C.abs(alpha - 2) + epsilon
+    # d = C.element_select(alpha_negative, alpha - epsilon, alpha + epsilon)
+    # loss = (b / d) * (C.pow(C.square(x / scale) / b + 1., 0.5 * d) - 1.)
 
     x = output_vector - target_vector
 
-    b = C.abs(alpha - 2) + epsilon
-    d = C.element_select(alpha_negative, alpha - epsilon, alpha + epsilon)
-    loss = (b / d) * (C.pow(C.square(x / scale) / b + 1., 0.5 * d) - 1.)
+    # Avoids the 3 singularity at alpha == 2, alpha == 0, and alpha == -inf
+    if alpha == 2:
+        loss = C.square(x / scale)  # L2 loss
+    elif alpha == 0:
+        loss = C.log(0.5 * C.square(x / scale) + 1)  # Cauchy loss
+    elif alpha <= -1e8:
+        loss = 1 - C.exp(-0.5 * C.square(x / scale))  # welsch loss
+    else:
+        alpha_offset = abs(alpha - 2)
+        factor = alpha_offset / alpha
+
+        core = C.pow(C.square(x / scale) / alpha_offset + 1, alpha / 2)
+        loss = factor * (core - 1)
+
     return loss

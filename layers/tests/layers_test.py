@@ -996,6 +996,16 @@ def test_filtered_responsed_normalization_layer():
     n = np.random.random((10, 3, 32, 32)).astype(np.float32)
     results = b.eval({a: n})
 
+    a = C.sequence.input_variable((3, 32))
+    b = Cx.layers.FilterResponseNormalization(num_static_spatial_axes=1, seq_axis_is_spatial=True)(a)
+
+    assert b.shape == (3, 32)
+
+    n = [np.random.random((10, 3, 32)).astype(np.float32),
+         np.random.random((7, 3, 32)).astype(np.float32), ]
+
+    results = b.eval({a: n})
+
 
 def test_boom_layer():
     output_dim = 32

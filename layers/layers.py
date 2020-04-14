@@ -1687,7 +1687,7 @@ def ThresholdedLinearUnit(name=''):
     return inner
 
 
-def FilterResponseNormalization(init_scale=1, name=''):
+def FilterResponseNormalization(num_static_spatial_axes: int = 2, seq_axis_is_spatial: bool = False, init_scale=1, name=''):
     """ Drop in replacement for BatchNormalization. It will provide superior performance.
 
     Filter Response Normalization (FRN) layer is a novel combination of a normalization and an activation function,
@@ -1707,6 +1707,8 @@ def FilterResponseNormalization(init_scale=1, name=''):
         assumes that the static axes are arrange in (C, H, W) or (C, W, H)
 
     Arguments:
+        num_static_spatial_axes (int): number of spatial axes that is a static axis (i.e not a dynamic sequence axis)
+        seq_axis_is_spatial (bool): whether sequence axis is a spatial axis.
         init_scale (float): initial value of scale
         name (str, defaults to ''): the name of the function instance in the network
 
@@ -1718,10 +1720,16 @@ def FilterResponseNormalization(init_scale=1, name=''):
     bias = C.Parameter(shape=(-1,), init=0, name='bias')
     tlu = ThresholdedLinearUnit()
 
+    reduce_axes = [i + 1 for i in range(num_static_spatial_axes)]
+
     @C.BlockFunction('FilterResponseNormalization', name)
     def inner(x):
         e = C.Constant(0.000000001)
-        v2 = C.reduce_mean(x * x, axis=[1, 2])
+        if seq_axis_is_spatial:
+            v2 = C.sequence.broadcast_as(C.reduce_mean(Cx.sequence.reduce_mean(x * x), axis=reduce_axes), x)
+        else:
+            v2 = C.reduce_mean(x * x, axis=reduce_axes)
+
         xhat = x / C.sqrt(v2 + e)
         y = gamma * xhat + bias  # denormalize with learned parameters
         z = tlu(y)

@@ -1720,9 +1720,10 @@ def FilterResponseNormalization(num_static_spatial_axes: int = 2, seq_axis_is_sp
         cntk.ops.functions.Function:
         A function that accepts one argument and applies the operation to it
     """
-    gamma = C.Parameter(shape=(-1,), init=init_scale, name='gamma')
-    bias = C.Parameter(shape=(-1,), init=0, name='bias')
-    tlu = ThresholdedLinearUnit(shape=(-1,) + tuple(1 for __ in range(num_static_spatial_axes)), init=0)
+    parameter_shape = (C.InferredDimension,) + tuple(1 for __ in range(num_static_spatial_axes))
+    gamma = C.Parameter(shape=parameter_shape, init=init_scale, name='gamma')
+    bias = C.Parameter(shape=parameter_shape, init=0, name='bias')
+    tlu = ThresholdedLinearUnit(shape=parameter_shape, init=0)
 
     reduce_axes = [i + 1 for i in range(num_static_spatial_axes)]
 

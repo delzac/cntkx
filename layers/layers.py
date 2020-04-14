@@ -1667,7 +1667,7 @@ def cFSMN(shape, proj_dim, activation, num_past_context, num_future_context, inp
     return inner
 
 
-def ThresholdedLinearUnit(name=''):
+def ThresholdedLinearUnit(shape=None, init=0, name=''):
     """ Thresholded Linear Unit - a learnable activation function
     tlu is defined as max(x, tau), where tau is a learnable parameter
 
@@ -1678,11 +1678,15 @@ def ThresholdedLinearUnit(name=''):
     Returns:
         :class:`~cntk.ops.functions.Function`:
     """
-    tau = C.Parameter(shape=(-1,), init=0, name='tau')
+    shape = shape or (-1, )
+    tau = C.Parameter(shape=shape, init=init, name='tau')
 
     @C.BlockFunction('Tlu', name)
     def inner(x):
-        return C.element_max(x, tau * C.ones_like(x))
+        if any(i == -1 for i in shape):
+            return C.element_max(x, tau * C.ones_like(x))
+
+        return C.element_max(x, tau)
 
     return inner
 
@@ -1718,7 +1722,7 @@ def FilterResponseNormalization(num_static_spatial_axes: int = 2, seq_axis_is_sp
     """
     gamma = C.Parameter(shape=(-1,), init=init_scale, name='gamma')
     bias = C.Parameter(shape=(-1,), init=0, name='bias')
-    tlu = ThresholdedLinearUnit()
+    tlu = ThresholdedLinearUnit(shape=(-1,) + tuple(1 for __ in range(num_static_spatial_axes)), init=0)
 
     reduce_axes = [i + 1 for i in range(num_static_spatial_axes)]
 

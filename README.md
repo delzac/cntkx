@@ -123,8 +123,8 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 ## News
 ***2020-04-15***
 ### Added `GaussianAttentionSeqImage`
-`GaussianAttentionSeqImage` is gaussian 2d spatial attention implementation.
-To use, the encoded image used be formulated as a cntk sequence. This can be useful when 
+`GaussianAttentionSeqImage` is a 2d spatial gaussian attention.
+To use, the encoded image should be formulated as a cntk sequence (example below). This can be useful when 
 you are constraint by gpu memory as 2d gaussian attention is more memory efficient than standard attention.
 
 This is from the deepmind paper, DRAW: A Recurrent Neural Network for Image Generation by Gregor et al

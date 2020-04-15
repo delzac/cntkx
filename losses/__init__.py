@@ -190,7 +190,7 @@ def cross_entropy_with_softmax(output_vector, target_vector, axis=-1, label_smoo
         return C.cross_entropy_with_softmax(output_vector, target_vector, axis=axis, name=name)
 
 
-def generalised_robust_barron_loss(output_vector, target_vector, alpha: float, scale: float):
+def generalised_robust_barron_loss(output_vector, target_vector, alpha: float, scale: float = None):
     """ Generalised robust loss that can be used as replacement to either l1 or L2 norm or any regression task.
 
     By introducing robustness as a continuous parameter, our loss function allows algorithms
@@ -232,13 +232,15 @@ def generalised_robust_barron_loss(output_vector, target_vector, alpha: float, s
           negative, and as alpha approaches -inf an outlier whose residual magnitude is larger than 3 * scale
           is almost completely ignored.
         scale (float): controls the size of the loss's quadratic bowl near x = 0, the derivative of the loss is
-          approximately linear when |x| < scale.
+          approximately linear when |x| < scale. If scale is set as None, it will be learned.
 
     Returns:
         :class:`~cntk.ops.functions.Function`
     """
+    if scale is None:
+        scale = C.Parameter(shape=(output_vector.shape[-1],), init=C.glorot_uniform())
+
     # alpha = C.Parameter(shape=(output_vector.shape[-1],), init=C.glorot_uniform())
-    # scale = C.Parameter(shape=(output_vector.shape[-1],), init=C.glorot_uniform())
     # alpha_negative = C.less(alpha, 0)
     #
     # x = output_vector - target_vector

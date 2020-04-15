@@ -67,6 +67,8 @@ cntkx only works with `python>=3.6`
 | `GlobalConcatPooling` | Global spatial concat pooling of ave and mean |
 |`FilterResponseNormalization`| Drop in replacement for batch norm with superior performance |
 |`Boom`| More parametrically efficient alternative to Position-Wise FeedForward layer found in Transformer |
+|`GaussianAttentionSeqImage`| Memory efficient attention that used 2d gaussian filters for images |
+
 
 | Blocks | Description |
 | --- | ---|

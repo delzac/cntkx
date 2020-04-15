@@ -553,6 +553,20 @@ def GaussianWindowAttention(nb_mixtures):
 def GaussianAttentionSeqImage(n: int, image_height: int, expected_image_width: int):
     """ Gaussian attention applied to an encoded sequence image (i.e. sequence axis is image width)
 
+    This implementation is from the deepmind paper, DRAW: A Recurrent Neural Network for Image Generation by Gregor et al
+    More details can be found in the following https://arxiv.org/abs/1502.04623
+
+    Example:
+        n = 5
+        num_channels = 3
+        image_height = 64
+        expected_image_width = 1000
+        image_seq = C.sequence.input_variable((num_channels, image_height))  # rgb image with variable width and fixed height
+        decoder_hidden_state = ...  # from decoder somewhere in the network
+        attended_image = Cx.layers.GaussianAttentionSeqImage(n, image_height, expected_image_width)(image_seq, decoder_hidden_state)
+
+        assert attended_image.shape == (num_channels, n, n)
+
     Arguments:
         n (int): number of gaussian attention filter per grid dimension,
           where total of number of attention filter = n * n grid

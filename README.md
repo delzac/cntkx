@@ -119,6 +119,28 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2020-04-15***
+### Added `GaussianAttentionSeqImage`
+`GaussianAttentionSeqImage` is gaussian 2d spatial attention implementation.
+To use, the encoded image used be formulated as a cntk sequence. This can be useful when 
+you are constraint by gpu memory as 2d gaussian attention is more memory efficient than standard attention.
+
+This is from the deepmind paper, DRAW: A Recurrent Neural Network for Image Generation by Gregor et al
+More details can be found in the following https://arxiv.org/abs/1502.04623
+
+Example:
+
+    n = 5
+    num_channels = 3
+    image_height = 64
+    expected_image_width = 1000
+    image_seq = C.sequence.input_variable((num_channels, image_height))  # rgb image with variable width and fixed height
+    decoder_hidden_state = ...  # from decoder somewhere in the network
+    attended_image = Cx.layers.GaussianAttentionSeqImage(n, image_height, expected_image_width)(image_seq, decoder_hidden_state)
+    
+    assert attended_image.shape == (num_channels, n, n)
+
+
 ***2020-03-29.***
 #### Added `generalised_robust_barron_loss` and `sample_with_bias`
 `generalised_robust_barron_loss` is a generalisation for generalization of the Cauchy/Lorentzian,

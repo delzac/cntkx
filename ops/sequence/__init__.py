@@ -86,7 +86,7 @@ def position(x, name=''):
     @C.BlockFunction('Sequence::Position', name)
     def inner(a):
         # reconcile_dynamic_axes is necessary to avoid subtle bugs e.g. sequence.where and one_hot
-        return C.reconcile_dynamic_axes(C.sequence.where(C.ones_like(Cx.scalar(a))), a)
+        return C.expand_dims(C.reconcile_dynamic_axes(C.sequence.where(C.ones_like(Cx.scalar(a))), a), axis=-1)
 
     return inner(x)  # {#, *] [1,]
 

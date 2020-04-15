@@ -523,7 +523,7 @@ def GaussianWindowAttention(nb_mixtures):
 
         encoded_unpacked = C.sequence.unpack(encoded, padding_value=0, no_mask_output=True)
         # context_unpacked: [#] [*=c, char_ohe]
-        u = C.expand_dims(Cx.sequence.position(encoded), axis=-1)  # position gives shape=(), expand_dims to (1,)
+        u = Cx.sequence.position(encoded)  # position gives shape=(1, )
         # u: [#, c], [1]
         u_values, u_valid = C.sequence.unpack(u, padding_value=0).outputs
         # u_values: [#] [*=c]
@@ -548,6 +548,74 @@ def GaussianWindowAttention(nb_mixtures):
         return output
 
     return attention
+
+
+def GaussianAttentionSeqImage(n: int, image_height: int, expected_image_width: int):
+    """ Gaussian attention applied to an encoded sequence image (i.e. sequence axis is image width)
+
+    Arguments:
+        n (int): number of gaussian attention filter per grid dimension,
+          where total of number of attention filter = n * n grid
+        image_height (int): the static image height dimension of the sequence
+        expected_image_width (int): Expected number of cols (width) in the image
+
+    """
+    dense = Dense(shape=(5, ))
+    A = expected_image_width
+    B = image_height
+
+    def attention_parameters(network_outputs):
+        g_x = 0.5 * (A + 1) * (network_outputs[0] + 1)  # grid centre - x (cols)
+        g_y = 0.5 * (B + 1) * (network_outputs[1] + 1)  # grid centre - y (rows)
+        sigma2 = C.exp(network_outputs[2])  # isotropic variance
+        delta = (max(A, B) - 1) / (n - 1) * C.exp(network_outputs[3])  # stride
+        gamma = C.exp(network_outputs[4])  # intensity
+        return g_x, g_y, sigma2, delta, gamma
+
+    def model(seq_image, decoded):
+        params = dense(decoded)
+        g_x, g_y, sigma2, delta, gamma = attention_parameters(params)
+
+        i = C.Constant(np.arange(n) + 1,)  # col of patch
+        j = C.Constant(np.arange(n) + 1,)  # row of patch
+        mu_x = g_x + (i - n / 2 - 0.5) * delta
+        mu_y = g_y + (j - n / 2 - 0.5) * delta
+        mu_x = C.expand_dims(mu_x, axis=-1)
+        mu_y = C.expand_dims(mu_y, axis=-1)
+        # mu_x: [#, *] [n, 1]
+        # mu_y: [#, *] [n, 1]
+
+        image = C.sequence.unpack(seq_image, padding_value=0, no_mask_output=True)
+        # image: [#] [*image_width, filters, image_height]
+
+        width_pos = Cx.sequence.position(seq_image)
+        width_pos = C.swapaxes(C.sequence.unpack(width_pos, padding_value=0, no_mask_output=True))
+        # width_pos: [#] [1, *image_width]
+
+        a = C.reconcile_dynamic_axes(width_pos, mu_x)               # x pos index of image (width)
+        b = C.Constant(np.arange(image_height).reshape((1, -1)))    # y pos index of image (height)
+        # a: [#, *] [1, *image_width]
+        # b: [] [1, image_height]
+
+        # calculate the which portion of the image that is attended by the gaussian filter
+        f_xi = C.exp(-0.5 * C.square(a - mu_x) / sigma2)
+        f_yj = C.exp(-0.5 * C.square(b - mu_y) / sigma2)
+        z_x = C.reduce_sum(f_xi, axis=1)
+        z_y = C.reduce_sum(f_yj, axis=1)
+
+        f_xi = f_xi / z_x
+        f_yj = f_yj / z_y
+        # f_xi: [#, *] [n, *image_width]
+        # f_yj: [#, *] [n, image_height]
+
+        # combine filters from x and y
+        attended = gamma * C.times(f_xi, C.times_transpose(image, f_yj), output_rank=2)
+        # attended: [#, *] [n, filters, n]
+        attended = C.swapaxes(attended)
+        # attended: [#, *] [filters, n (x) , n (y)]
+        return attended
+
+    return model
 
 
 def PreTrainedBertEncoder(tf_bert_model_filepath: str, num_heads: int, dropout_rate: float = None):

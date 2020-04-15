@@ -2,7 +2,7 @@ import cntk as C
 from cntkx.layers.models import Transformer, TransformerDecoder, TransformerEncoder, MultiHeadAttention
 from cntkx.layers.models import MultiHeadAttentionBlock, TransformerEncoderBlock, TransformerDecoderBlock
 from cntkx.layers.models import ScaledDotProductAttention, GaussianWindowAttention, PreTrainedBertEncoder
-from cntkx.layers.models import PreTrainedBertModel
+from cntkx.layers.models import PreTrainedBertModel, GaussianAttentionSeqImage
 import numpy as np
 import pytest
 
@@ -619,3 +619,23 @@ def test_pretrained_bert_model2():
 
     with pytest.raises(Exception):
         model(text_tensor, token_type_tensor)
+
+
+def test_gaussian_attention_image_seq():
+    dec_dim = 7
+    channels = 3
+    n = 5
+    image_height = 32
+    expected_image_width = 1000
+    axis1 = C.Axis.new_unique_dynamic_axis('axis1')
+    axis2 = C.Axis.new_unique_dynamic_axis('axis2')
+
+    a = C.sequence.input_variable(dec_dim, sequence_axis=axis1)
+    encoded = C.sequence.input_variable((channels, image_height), sequence_axis=axis2)
+    b = GaussianAttentionSeqImage(n=n, image_height=image_height, expected_image_width=expected_image_width)(encoded, a)
+
+    assert b.shape == (channels, n, n)
+
+    n1 = [np.random.random((10, dec_dim)).astype(np.float32), ]
+    n2 = [np.random.random((8, channels, image_height)).astype(np.float32), ]
+    results = b.eval({a: n1, encoded: n2})

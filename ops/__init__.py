@@ -323,7 +323,10 @@ def mish(x, name=''):
     This activation function is adopted in Fast ai too. It should be noted that you are trading some
     computation complexity for a small performance boost.
 
-    Maintainer's note: based on testing, the additional computation complexity is minimal.
+    Minimum of f(x) is observed to be ≈-0.30884 at x≈-1.1924
+
+    Maintainer's note:
+        based on testing, the additional computation complexity is minimal.
 
     For more detail, the paper can be found here 'https://arxiv.org/abs/1908.08681v2'
     """

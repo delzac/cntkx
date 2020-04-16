@@ -443,17 +443,13 @@ def Transformer(num_encoder_blocks: int = 6, num_decoder_blocks=6, num_heads_enc
     return model
 
 
-def GaussianWindowAttention(nb_mixtures):
+def GaussianWindowAttention(nb_mixtures, activation=C.exp, init=C.glorot_uniform()):
     """
     Implementation of the attention model found in "Generating sequences with recurrent neural networks" by Alex Graves.
 
     Gaussian window attention uses a directional mixture of gaussian kernels as convolution/attention window.
 
     For more details, the paper can be found in https://arxiv.org/abs/1308.0850
-
-    NOTE:
-        There is some deviattion from the original implementation where instead of using exp activation function
-        to keep a, b and k to be a non negative number, i use Relu. Relu improves the stability of the attention.
 
     Example:
         seq1 = C.Axis.new_unique_dynamic_axis('seq1')
@@ -473,7 +469,7 @@ def GaussianWindowAttention(nb_mixtures):
         :class:`~cntk.ops.functions.Function`:
 
     """
-    dense = Dense(shape=3 * nb_mixtures, activation=C.relu, init=C.he_normal(), name="GravesAttention")
+    dense = Dense(shape=3 * nb_mixtures, activation=activation, init=init, name="GravesAttention")
 
     def window_weight(a, b, k, u):
         """
@@ -550,7 +546,7 @@ def GaussianWindowAttention(nb_mixtures):
     return attention
 
 
-def GaussianAttentionSeqImage(n: int, image_height: int, expected_image_width: int):
+def GaussianAttentionSeqImage(n: int, image_height: int, expected_image_width: int, name=''):
     """ Gaussian attention applied to an encoded sequence image (i.e. sequence axis is image width)
 
     This implementation is from the deepmind paper, DRAW: A Recurrent Neural Network for Image Generation by Gregor et al
@@ -586,6 +582,7 @@ def GaussianAttentionSeqImage(n: int, image_height: int, expected_image_width: i
         gamma = C.exp(network_outputs[4])  # intensity
         return g_x, g_y, sigma2, delta, gamma
 
+    @C.BlockFunction('GaussianAttentionSeqImage', name)
     def model(seq_image, decoded):
         params = dense(decoded)
         g_x, g_y, sigma2, delta, gamma = attention_parameters(params)
@@ -605,8 +602,11 @@ def GaussianAttentionSeqImage(n: int, image_height: int, expected_image_width: i
         width_pos = Cx.sequence.position(seq_image)
         # width_pos: [#, *] [1]
 
-        a = C.swapaxes(C.sequence.unpack(width_pos, padding_value=999_999_999, no_mask_output=True))
-        # a: [#] [1, *image_width]
+        width_pos_unpacked = C.sequence.unpack(width_pos, padding_value=999_999_999, no_mask_output=True)
+        # width_pos: [#] [*image_width, 1]
+
+        a = C.sequence.broadcast_as(C.swapaxes(width_pos_unpacked), mu_x)
+        # a: [#, *] [1, *image_width]
         # x pos index of image (width)
 
         b = C.Constant(np.arange(image_height).reshape((1, -1)))
@@ -630,7 +630,8 @@ def GaussianAttentionSeqImage(n: int, image_height: int, expected_image_width: i
         # f_yj: [#, *] [n, image_height]
 
         # combine filters from x and y
-        attended = gamma * C.times(f_xi, C.times_transpose(image, f_yj), output_rank=2)
+        image_broadcasted = C.sequence.broadcast_as(image, f_yj)
+        attended = gamma * C.times(f_xi, C.times_transpose(image_broadcasted, f_yj), output_rank=2)
         # attended: [#, *] [n, filters, n]
         attended = C.swapaxes(attended)
         # attended: [#, *] [filters, n (x) , n (y)]

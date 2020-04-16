@@ -388,10 +388,32 @@ def LSTM(shape, activation=default_override_or(tanh), weight_drop_rate=None,
     return lstm
 
 
-def GroupLSTM(shape, groups=2, activation=default_override_or(tanh),
+def GroupLSTM(shape: int, groups=2, activation=default_override_or(tanh),
               init=default_override_or(glorot_uniform()), init_bias=default_override_or(0),
               enable_self_stabilization=default_override_or(False), name=''):
+    """ Implementation of group LSTM, the equivalent concept of group convolution but for recurrent neural networks.
 
+    More details can be found in Efficient Sequence Learning with Group Recurrent Networks Gao et al
+    https://www.aclweb.org/anthology/N18-1073/
+
+    While it is parametrically efficient, it uses more gpu memory during training due to the permutation of
+    hidden states from the lstm groups.
+
+    Arguments:
+        shape (int): shape of desired output
+        groups (int): number of groups of lstm (defaults 2) The larger the group size, the more parameter efficient.
+        activation (:class:`~cntk.ops.functions.Function`, defaults to :func:`~cntk.ops.tanh`): function to apply at the end, e.g. `relu`
+        init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to `glorot_uniform`): initial value of weights `W`
+        init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
+        enable_self_stabilization (bool, defaults to `False`): if `True` then add a :func:`~cntk.layers.blocks.Stabilizer`
+         to all state-related projections (but not the data input)
+        name (str, defaults to ''): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+        A function ``(prev_h, prev_c, input) -> (h, c)`` that implements one step of a recurrent GroupLSTM layer.
+
+    """
     assert isinstance(shape, int)
 
     if shape % groups:
@@ -401,7 +423,6 @@ def GroupLSTM(shape, groups=2, activation=default_override_or(tanh),
 
     @C.BlockFunction('GroupLSTM', name)
     def group_lstm(dh, dc, x):
-
         x_grps = split(x, groups).outputs
         dh_grps = split(dh, groups).outputs
         dc_grps = split(dc, groups).outputs
@@ -415,8 +436,8 @@ def GroupLSTM(shape, groups=2, activation=default_override_or(tanh),
             c_grps.append(c)
 
         # inter-group correlation through permutation of dimensions
-        h_output = C.reshape(C.swapaxes(C.reshape(C.splice(*h_grps), (groups, shape // groups))), (shape,))
-        c_output = C.reshape(C.swapaxes(C.reshape(C.splice(*c_grps), (groups, shape // groups))), (shape,))
+        h_output = C.reshape(C.swapaxes(C.splice(*h_grps, axis=C.Axis.new_leading_axis())), (shape,))
+        c_output = C.reshape(C.swapaxes(C.splice(*c_grps, axis=C.Axis.new_leading_axis())), (shape,))
 
         return h_output, c_output
 

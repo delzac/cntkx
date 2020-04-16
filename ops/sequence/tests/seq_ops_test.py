@@ -21,6 +21,8 @@ def test_position():
     a = C.sequence.input_variable((1, 2, 3, 4, 5))
     p = position(a)
 
+    assert p.shape == (1,)
+
     n = [np.random.random((4, 1, 2, 3, 4, 5)).astype(np.float32),
          np.random.random((11, 1, 2, 3, 4, 5)).astype(np.float32),
          np.random.random((15, 1, 2, 3, 4, 5)).astype(np.float32)]
@@ -28,7 +30,7 @@ def test_position():
     results = p.eval({a: n})
 
     for actual, nn in zip(results, n):
-        desired = np.arange(nn.shape[0])
+        desired = np.arange(nn.shape[0])[:, None]
         np.testing.assert_equal(actual, desired)
 
 

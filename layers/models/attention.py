@@ -603,19 +603,26 @@ def GaussianAttentionSeqImage(n: int, image_height: int, expected_image_width: i
         # image: [#] [*image_width, filters, image_height]
 
         width_pos = Cx.sequence.position(seq_image)
-        width_pos = C.swapaxes(C.sequence.unpack(width_pos, padding_value=0, no_mask_output=True))
-        # width_pos: [#] [1, *image_width]
+        # width_pos: [#, *] [1]
 
-        a = C.reconcile_dynamic_axes(width_pos, mu_x)               # x pos index of image (width)
-        b = C.Constant(np.arange(image_height).reshape((1, -1)))    # y pos index of image (height)
-        # a: [#, *] [1, *image_width]
+        a = C.swapaxes(C.sequence.unpack(width_pos, padding_value=999_999_999, no_mask_output=True))
+        # a: [#] [1, *image_width]
+        # x pos index of image (width)
+
+        b = C.Constant(np.arange(image_height).reshape((1, -1)))
         # b: [] [1, image_height]
+        # y pos index of image (height)
 
         # calculate the which portion of the image that is attended by the gaussian filter
         f_xi = C.exp(-0.5 * C.square(a - mu_x) / sigma2)
         f_yj = C.exp(-0.5 * C.square(b - mu_y) / sigma2)
+        # f_xi: [#, *] [n, *image_width]
+        # f_yj: [#, *] [n, image_height]
+
         z_x = C.reduce_sum(f_xi, axis=1)
         z_y = C.reduce_sum(f_yj, axis=1)
+        # z_x: [#, *] [n]
+        # z_y: [#, *] [n]
 
         f_xi = f_xi / z_x
         f_yj = f_yj / z_y

@@ -59,13 +59,15 @@ def length(x, name=''):
 
     Returns:
         :class:`~cntk.ops.functions.Function`
+        Not a sequence tensor (i.e. no dynamic sequence axis)
+
     """
 
     @C.BlockFunction('Sequence::Length', name)
     def inner(a):
         return C.expand_dims(C.sequence.reduce_sum(C.sequence.broadcast_as(1, a)), axis=C.Axis.new_leading_axis())
 
-    return inner(x)
+    return inner(x)  # shape: [#] [1, ]
 
 
 def position(x, name=''):
@@ -73,19 +75,25 @@ def position(x, name=''):
 
     First element of sequence will have position value of 0.
 
+    Example:
+        a = C.sequence.input_variable(10)
+        b = Cx.sequence.position(a)
+
+        assert b.shape == (1,)
+
     Arguments:
         x: input sequence tensor
         name (str): name of function
 
     Returns:
         :class:`~cntk.ops.functions.Function`
-        a sequence tensor of shape (1,) with value of 0 to `seq_length` depending on position
+        a sequence tensor of shape (1,) with value from 0 (first seq item) to `seq_length` - 1 (last seq item)
     """
 
     @C.BlockFunction('Sequence::Position', name)
     def inner(a):
         # reconcile_dynamic_axes is necessary to avoid subtle bugs e.g. sequence.where and one_hot
-        return C.expand_dims(C.reconcile_dynamic_axes(C.sequence.where(C.ones_like(Cx.scalar(a))), a), axis=-1)
+        return C.expand_dims(C.reconcile_dynamic_axes(C.sequence.where(C.sequence.broadcast_as(1, a)), a), axis=-1)
 
     return inner(x)  # {#, *] [1,]
 

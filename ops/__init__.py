@@ -113,8 +113,8 @@ def scalar(x, name=''):
         a scalar of shape (1,)
     """
     @C.BlockFunction('scalar', name)
-    def inner(x):
-        return C.slice(C.reshape(x, (-1,)), 0, 0, 1)
+    def inner(a):
+        return C.slice(C.reshape(a, (-1,)), 0, 0, 1)
 
     return inner(x)
 

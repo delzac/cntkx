@@ -443,7 +443,7 @@ def Transformer(num_encoder_blocks: int = 6, num_decoder_blocks=6, num_heads_enc
     return model
 
 
-def GaussianWindowAttention(nb_mixtures, activation=C.exp, init=C.glorot_uniform()):
+def GaussianWindowAttention(nb_mixtures, activation=C.exp, init=C.glorot_uniform(), name=''):
     """
     Implementation of the attention model found in "Generating sequences with recurrent neural networks" by Alex Graves.
 
@@ -509,7 +509,7 @@ def GaussianWindowAttention(nb_mixtures, activation=C.exp, init=C.glorot_uniform
         k = C.expand_dims(k, axis=-1)
         return a, b, k
 
-    @C.Function
+    @C.BlockFunction('GaussianWindowAttention', name)
     def attention(encoded, network):
         abk = dense(network)
         a, b, k = gaussian_windows_attention_coefficients(abk, nb_mixtures)
@@ -521,8 +521,8 @@ def GaussianWindowAttention(nb_mixtures, activation=C.exp, init=C.glorot_uniform
         # context_unpacked: [#] [*=c, char_ohe]
         u = Cx.sequence.position(encoded)  # position gives shape=(1, )
         # u: [#, c], [1]
-        u_values, u_valid = C.sequence.unpack(u, padding_value=0).outputs
-        # u_values: [#] [*=c]
+        u_values, u_valid = C.sequence.unpack(u, padding_value=999_999_999).outputs
+        # u_values: [#] [*=c, 1]
         # u_valid: [#] [*=c]
         u_values_broadcast = C.swapaxes(C.sequence.broadcast_as(u_values, k))
         # u_values_broadcast: [#, n] [1, *=c]

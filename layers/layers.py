@@ -6,7 +6,7 @@ from cntkx.layers.blocks import _INFERRED
 from cntk.default_options import default_override_or, get_default_override
 from cntk.layers.blocks import identity, _initializer_for
 from cntk.layers import Dropout
-from cntk.layers import MaxPooling, LayerNormalization, AveragePooling
+from cntk.layers import MaxPooling, AveragePooling
 from cntk.internal import _as_tuple
 from cntk.variables import Record
 
@@ -1776,3 +1776,54 @@ def Boom(output_dim: int, expansion_factor: int, activation=Cx.gelu, init=C.he_n
         return hidden
 
     return inner
+
+
+def LayerNormalization(initial_scale=1, initial_bias=0, epsilon=default_override_or(0.000001), name=''):
+    """
+    LayerNormalization(initial_scale=1, initial_bias=0, epsilon=0.00001, name='')
+
+    Layer factory function to create a function that implements layer normalization.
+
+    Layer normalization applies this formula to every input element (element-wise):
+    ``y = (x - mean(x)) / (stddev(x) + epsilon) * scale + bias``
+    where ``scale`` and ``bias`` are learned parameters of the same dimention as the input/output.
+
+    Example:
+     >>> f = LayerNormalization(initial_scale=2, initial_bias=1)
+     >>> f.update_signature(4)
+     >>> f([np.array([4,0,0,4])])  # result has mean 1 and standard deviation 2, reflecting the initial values for scale and bias
+         array([[ 2.99999, -0.99999, -0.99999,  2.99999]], dtype=float32)
+
+    Args:
+     initial_scale (float, default 1): initial value for the ``scale`` parameter
+     initial_bias (float, default 0): initial value for the ``bias`` parameter
+     epsilon (float, default 0.00001): epsilon added to the standard deviation to avoid division by 0
+     name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the operation to it
+
+    Todo:
+       Add paper reference.
+    """
+    epsilon = get_default_override(LayerNormalization, epsilon=epsilon)
+
+    dtype = get_default_override(None, dtype=default_override_or(np.float32))
+
+    # parameters bound to this Function
+    scale = C.Parameter(C.InferredDimension, init=initial_scale, name='scale')  # TODO: if this gets usage then offer a Softplus version like Stabilizer() for stability?
+    bias  = C.Parameter(C.InferredDimension, init=initial_bias, name='bias')
+
+    # cast to specified data type. The default for number is float32 which might be different than desired.
+    epsilon = np.asarray(epsilon, dtype=dtype)
+
+    # expression
+    @C.BlockFunction('LayerNormalization', name)
+    def layer_normalize(x):
+        mean = C.reduce_mean(x)  # normalize w.r.t. actual sample statistics
+        x0 = x - mean
+        std = C.sqrt(C.reduce_mean(x0 * x0) + epsilon)
+        x_hat = x0 / std
+        return x_hat * scale + bias    # denormalize with learned parameters
+    return layer_normalize

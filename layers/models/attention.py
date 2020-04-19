@@ -443,7 +443,7 @@ def Transformer(num_encoder_blocks: int = 6, num_decoder_blocks=6, num_heads_enc
     return model
 
 
-def GaussianWindowAttention(nb_mixtures, activation=C.exp, init=C.glorot_uniform(), name=''):
+def GaussianWindowAttention(nb_mixtures, activation=C.softplus, init=C.he_normal(), name=''):
     """
     Implementation of the attention model found in "Generating sequences with recurrent neural networks" by Alex Graves.
 
@@ -451,6 +451,10 @@ def GaussianWindowAttention(nb_mixtures, activation=C.exp, init=C.glorot_uniform
 
     For more details, the paper can be found in https://arxiv.org/abs/1308.0850
 
+    Note:
+        There is a slight deviation from the original implementation where we use softplus as the activation
+        function instead of exp. Exp activation causes some minor instability.
+    
     Example:
         seq1 = C.Axis.new_unique_dynamic_axis('seq1')
         seq2 = C.Axis.new_unique_dynamic_axis('seq2')
@@ -521,7 +525,7 @@ def GaussianWindowAttention(nb_mixtures, activation=C.exp, init=C.glorot_uniform
         # context_unpacked: [#] [*=c, char_ohe]
         u = Cx.sequence.position(encoded)  # position gives shape=(1, )
         # u: [#, c], [1]
-        u_values, u_valid = C.sequence.unpack(u, padding_value=999_999_999).outputs
+        u_values, u_valid = C.sequence.unpack(u, padding_value=999_999).outputs
         # u_values: [#] [*=c, 1]
         # u_valid: [#] [*=c]
         u_values_broadcast = C.swapaxes(C.sequence.broadcast_as(u_values, k))
@@ -602,7 +606,7 @@ def GaussianAttentionSeqImage(n: int, image_height: int, expected_image_width: i
         width_pos = Cx.sequence.position(seq_image)
         # width_pos: [#, *] [1]
 
-        width_pos_unpacked = C.sequence.unpack(width_pos, padding_value=999_999_999, no_mask_output=True)
+        width_pos_unpacked = C.sequence.unpack(width_pos, padding_value=999_999, no_mask_output=True)
         # width_pos: [#] [*image_width, 1]
 
         a = C.sequence.broadcast_as(C.swapaxes(width_pos_unpacked), mu_x)

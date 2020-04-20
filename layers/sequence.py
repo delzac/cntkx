@@ -320,11 +320,19 @@ def SequenceDropout(dropout_rate: float, seed=SentinelValueForAutoSelectRandomSe
     """ Completely mask some sequence elements with zeros.
     This is different from normal dropout where there dimensions of the static axis have some probably of being zero-ed.
 
+    Arguments:
+        dropout_rate (float): probability of dropping out an element
+        seed (int): seed for randomisation
+        name (str, defaults to ''): the name of the Function instance in the network
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the operation to it
 
     """
     dropout = C.layers.Dropout(dropout_rate, seed=seed)
 
-    @C.BlockFunction('VariationalDropout', name)
+    @C.BlockFunction('SequenceDropout', name)
     def inner(x):
         mask = dropout(C.sequence.broadcast_as(1, x))
         return mask * x

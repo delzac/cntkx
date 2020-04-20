@@ -1,6 +1,6 @@
 import cntk as C
 import numpy as np
-from cntkx.layers.sequence import Recurrence, VariationalDropout, PyramidalBiRecurrence, BiRecurrence
+from cntkx.layers.sequence import Recurrence, VariationalDropout, PyramidalBiRecurrence, BiRecurrence, SequenceDropout
 from cntkx.layers import IndyLSTM
 from cntk.layers import LSTM
 
@@ -144,3 +144,23 @@ def test_birecurrence():
 
     c.eval({a: n})
     b.eval({a: n})
+
+
+def test_sequence_dropout():
+    desired = [5, 6, 19, 24, 53, 259]
+    dim = 3
+    a = C.sequence.input_variable(dim)
+    b = SequenceDropout(0.5, 1)(a)
+
+    n = [np.ones((10, dim)).astype(np.float32),
+         np.ones((20, dim)).astype(np.float32),
+         np.ones((30, dim)).astype(np.float32),
+         np.ones((50, dim)).astype(np.float32),
+         np.ones((100, dim)).astype(np.float32),
+         np.ones((500, dim)).astype(np.float32), ]
+
+    df, fv = b.forward({a: n}, [b.output], set([b.output]))
+
+    for seq, d in zip(fv[b.output], desired):
+        non_zeroed = np.count_nonzero(np.mean(seq, axis=1))
+        assert non_zeroed == d

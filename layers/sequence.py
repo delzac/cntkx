@@ -314,3 +314,19 @@ def VariationalDropout(dropout_rate: float, seed=SentinelValueForAutoSelectRando
         return mask * x
 
     return inner
+
+
+def SequenceDropout(dropout_rate: float, seed=SentinelValueForAutoSelectRandomSeed, name=''):
+    """ Completely mask some sequence elements with zeros.
+    This is different from normal dropout where there dimensions of the static axis have some probably of being zero-ed.
+
+
+    """
+    dropout = C.layers.Dropout(dropout_rate, seed=seed)
+
+    @C.BlockFunction('VariationalDropout', name)
+    def inner(x):
+        mask = dropout(C.sequence.broadcast_as(1, x))
+        return mask * x
+
+    return inner

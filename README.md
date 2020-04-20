@@ -68,6 +68,7 @@ cntkx only works with `python>=3.6`
 |`FilterResponseNormalization`| Drop in replacement for batch norm with superior performance |
 |`Boom`| More parametrically efficient alternative to Position-Wise FeedForward layer found in Transformer |
 |`GaussianAttentionSeqImage`| Memory efficient attention that used 2d gaussian filters for images |
+| `SequenceDropout` | Dropout entire sequence elements |
 
 
 | Blocks | Description |
@@ -121,6 +122,12 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2020-04-20***
+### Added `SequenceDropout`
+`SequenceDropout` dropouts entire sequence elements along the dynamic sequence axis.
+
+
+
 ***2020-04-15***
 ### Added `GaussianAttentionSeqImage`
 `GaussianAttentionSeqImage` is a 2d spatial gaussian attention.

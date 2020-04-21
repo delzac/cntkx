@@ -321,7 +321,7 @@ def SequenceDropout(dropout_rate: float, seed=SentinelValueForAutoSelectRandomSe
     This is different from normal dropout where there dimensions of the static axis have some probably of being zero-ed.
 
     Arguments:
-        dropout_rate (float): probability of dropping out an element
+        dropout_rate (float): probability of dropping out (i.e. zero out) an entire sequence element
         seed (int): seed for randomisation
         name (str, defaults to ''): the name of the Function instance in the network
 
@@ -334,7 +334,7 @@ def SequenceDropout(dropout_rate: float, seed=SentinelValueForAutoSelectRandomSe
 
     @C.BlockFunction('SequenceDropout', name)
     def inner(x):
-        mask = dropout(C.sequence.broadcast_as(1, x))
+        mask = dropout(C.sequence.broadcast_as(1 / dropout_rate, x))
         return mask * x
 
     return inner

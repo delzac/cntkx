@@ -334,7 +334,7 @@ def SequenceDropout(dropout_rate: float, seed=SentinelValueForAutoSelectRandomSe
 
     @C.BlockFunction('SequenceDropout', name)
     def inner(x):
-        mask = dropout(C.sequence.broadcast_as(1 / dropout_rate, x))
+        mask = dropout(C.sequence.broadcast_as(1 - dropout_rate, x))
         return mask * x
 
     return inner

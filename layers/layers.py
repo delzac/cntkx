@@ -1830,7 +1830,15 @@ def LayerNormalization(initial_scale=1, initial_bias=0, epsilon=default_override
 
 
 def SEBlock(num_filters: int, r: int = 16, activation=C.relu, name=''):
-    """ Squeeze and Excitation block
+    """ Squeeze and Excitation block that adaptively recalibrates channel-wise feature
+    responses by explicitly modelling interdependencies between channels. It was show that these blocks can be
+    stacked together to form SENet architectures that generalise extremely effectively across different datasets.
+
+    Its the winner for ILSVRC2017 classification submission.
+
+    More details can be found in the paper "Squeeze-and-Excitation Networks" by Jie hu et al.
+    https://arxiv.org/abs/1709.01507
+
     Input tensor `x` is assumed to be of shape (C, H, W)
 
     Arguments:
@@ -1855,7 +1863,12 @@ def SEBlock(num_filters: int, r: int = 16, activation=C.relu, name=''):
 
 
 def SequenceSEBlock(num_filters: int, r: int = 16, activation=C.relu, name=''):
-    """ Squeeze and Excitation block
+    """ Squeeze and Excitation block that adaptively recalibrates channel-wise feature
+    responses by explicitly modelling interdependencies between channels. It was show that these blocks can be
+    stacked together to form SENet architectures that generalise extremely effectively across different datasets.
+
+    Its the winner for ILSVRC2017 classification submission.
+
     Input tensor `x` is assumed to be of shape (C, H) with a variable width dimension in the dyanmic sequence axis.
 
     Arguments:

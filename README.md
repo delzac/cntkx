@@ -69,6 +69,8 @@ cntkx only works with `python>=3.6`
 |`Boom`| More parametrically efficient alternative to Position-Wise FeedForward layer found in Transformer |
 |`GaussianAttentionSeqImage`| Memory efficient attention that used 2d gaussian filters for images |
 | `SequenceDropout` | Dropout entire sequence elements |
+| `SEBlock` | Squeeze and Excitation block |
+| `SequenceSEBlock` | Squeeze and Excitation block for variable width image sequence |
 
 
 | Blocks | Description |
@@ -122,6 +124,16 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2020-05-01***
+### Added `SEBlock` and `SequenceSEBlock`
+`SEBlock` and `SequenceSEBlock` are squeeze-excitation blocks that adaptively recalibrates channel-wise feature
+responses by explicitly modelling interdependencies between channels. It was show that these blocks can be
+stacked together to form SENet architectures that generalise extremely effectively across different datasets.
+
+Its the winner for ILSVRC2017 classification submission. More details can be found in the
+paper [Squeeze-and-Excitation Networks](https://arxiv.org/abs/1709.01507) by Jie hu et al.
+
+
 ***2020-04-20***
 ### Added `SequenceDropout`
 `SequenceDropout` dropouts entire sequence elements along the dynamic sequence axis.

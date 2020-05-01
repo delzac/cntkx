@@ -5,7 +5,7 @@ import cntkx as Cx
 from cntkx.layers.blocks import _INFERRED
 from cntk.default_options import default_override_or, get_default_override
 from cntk.layers.blocks import identity, _initializer_for
-from cntk.layers import Dropout
+from cntk.layers import Dropout, GlobalAveragePooling
 from cntk.layers import MaxPooling, AveragePooling
 from cntk.internal import _as_tuple
 from cntk.variables import Record
@@ -1850,12 +1850,13 @@ def SEBlock(num_filters: int, r: int = 16, activation=C.relu, name=''):
         A function that accepts one argument and applies the operation to it
     """
 
+    pool = GlobalAveragePooling()
     proj = Dense(num_filters // r, activation=activation, bias=False)
     dense = Dense(num_filters, activation=C.sigmoid, bias=False)
 
     @C.BlockFunction('SEBLock', name)
     def inner(x):
-        channel_descriptors = C.reduce_mean(x, axis=[1, 2])
+        channel_descriptors = pool(x)
         scale = C.expand_dims(C.expand_dims(dense(proj(channel_descriptors)), axis=-1), axis=-1)
         return scale * x
 

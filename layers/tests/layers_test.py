@@ -109,7 +109,7 @@ def test_positional_embedding():
     max_seq_length = 100
     hidden_dim = 120
     a = C.sequence.input_variable(12)
-    b = PositionalEmbedding(max_seq_length, hidden_dim)(a)
+    b = PositionalEmbedding(hidden_dim, max_seq_length)(a)
 
     assert b.shape == (hidden_dim, )
 
@@ -124,7 +124,7 @@ def test_bert_embeddings():
 
     text_tensor = C.sequence.input_variable(100)
     token_type_tensor = C.sequence.input_variable(2)
-    b = BertEmbeddings(max_seq_length, hidden_dim, 0.1)(text_tensor, token_type_tensor)
+    b = BertEmbeddings(hidden_dim, max_seq_length, 0.1)(text_tensor, token_type_tensor)
 
     assert b.shape == (hidden_dim, )
 
@@ -1018,3 +1018,24 @@ def test_boom_layer():
 
     n = np.random.random((10, 20)).astype(np.float32)
     results = b.eval({a: n})
+
+
+def test_se_block():
+    a = C.input_variable((8, 32, 16))
+    b = Cx.layers.SEBlock(8, r=2)(a)
+
+    assert b.shape == (8, 32, 16)
+
+    n = np.random.random((10, 8, 32, 16)).astype(np.float32)
+    b.eval({a: n})
+
+
+def test_sequence_se_block():
+    a = C.sequence.input_variable((32, 24))
+    b = Cx.layers.SequenceSEBlock(32, activation=Cx.mish)(a)
+
+    assert b.shape == (32, 24)
+
+    n = [np.random.random((16, 32, 24)).astype(np.float32),
+         np.random.random((7, 32, 24)).astype(np.float32), ]
+    b.eval({a: n})

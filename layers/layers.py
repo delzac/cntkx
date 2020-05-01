@@ -1290,17 +1290,17 @@ def GatedLinearUnit(window=2, hidden_dim=None, activation=C.sigmoid, name=''):
     return inner
 
 
-def PositionalEmbedding(max_seq_length: int, hidden_dim: int, init=default_override_or(C.glorot_uniform()),
+def PositionalEmbedding(hidden_dim: int, max_seq_length: int, init=default_override_or(C.glorot_uniform()),
                         weights=None, name: str = ''):
     """ Learnable positional embedding
 
     Example:
         a = C.sequence.input_variable(5)
-        positional_embedding =
+        positional_embedding = PositionalEmbedding(1000)(a)
 
     Arguments:
-        max_seq_length (int): max sequence length embeddable
         hidden_dim (int): dimension of the embedding vector
+        max_seq_length (int): max sequence length embeddable
         init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): (learnable embedding only) initial value of weights `E`
         weights (NumPy array, mutually exclusive with ``init``, defuats to `None`): (user-supplied embedding only) the lookup table.
           The matrix rows are the embedding vectors, ``weights[i,:]`` being the embedding that corresponds to input category `i`.
@@ -1315,7 +1315,7 @@ def PositionalEmbedding(max_seq_length: int, hidden_dim: int, init=default_overr
 
     @C.BlockFunction('PositionalEmbedding', name)
     def inner(x):
-        position_index = Cx.sequence.position(x)
+        position_index = C.squeeze(Cx.sequence.position(x))
         pos = C.one_hot(position_index, max_seq_length, sparse_output=True)
         embedded = position_embeddings(pos)
         return embedded
@@ -1323,7 +1323,7 @@ def PositionalEmbedding(max_seq_length: int, hidden_dim: int, init=default_overr
     return inner
 
 
-def BertEmbeddings(max_seq_length, hidden_dim: int = None, dropout_rate: float = None,
+def BertEmbeddings(hidden_dim: int, max_seq_length: int, dropout_rate: float = None,
                    word_embed_init=default_override_or(C.glorot_uniform()), word_embed_weights=None,
                    position_embed_init=default_override_or(C.glorot_uniform()), position_embed_weights=None,
                    token_type_embed_init=default_override_or(C.glorot_uniform()), token_type_embed_weights=None,
@@ -1345,7 +1345,7 @@ def BertEmbeddings(max_seq_length, hidden_dim: int = None, dropout_rate: float =
 
     """
     word_embeddings = Embedding(shape=hidden_dim, init=word_embed_init, weights=word_embed_weights, name='word_embeddings')
-    position_embeddings = PositionalEmbedding(max_seq_length, hidden_dim=hidden_dim, init=position_embed_init, weights=position_embed_weights, name='position_embeddings')
+    position_embeddings = PositionalEmbedding(hidden_dim=hidden_dim, max_seq_length=max_seq_length, init=position_embed_init, weights=position_embed_weights, name='position_embeddings')
     token_type_embeddings = Embedding(shape=hidden_dim, init=token_type_embed_init, weights=token_type_embed_weights, name='token_type_embeddings')  # aka 'segment embedding'
 
     layer_norm = LayerNormalization(initial_scale=layer_norm_init_scale, initial_bias=layer_norm_init_bias,
@@ -1408,8 +1408,8 @@ def PreTrainedBertEmbeddings(tf_bert_model_filepath: str, dropout_rate: float = 
     token_type_embed_variables = pretrained_variables[3]
     word_embed_variables = pretrained_variables[4]
 
-    pretrained_bert_embedding = BertEmbeddings(max_seq_length=position_embed_variables[1][0],
-                                               hidden_dim=1,  # this argument must be declared and will be ignored
+    pretrained_bert_embedding = BertEmbeddings(hidden_dim=1,  # this argument must be declared and will be ignored,
+                                               max_seq_length=position_embed_variables[1][0],
                                                dropout_rate=dropout_rate,
                                                word_embed_init=word_embed_variables[-1],
                                                position_embed_init=position_embed_variables[-1],
@@ -1827,3 +1827,54 @@ def LayerNormalization(initial_scale=1, initial_bias=0, epsilon=default_override
         x_hat = x0 / std
         return x_hat * scale + bias    # denormalize with learned parameters
     return layer_normalize
+
+
+def SEBlock(num_filters: int, r: int = 16, activation=C.relu, name=''):
+    """ Squeeze and Excitation block
+    Input tensor `x` is assumed to be of shape (C, H, W)
+
+    Arguments:
+        num_filters (int): number of output filters
+        r (int): reduction factor of the inner projection
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the operation to it
+    """
+
+    proj = Dense(num_filters // r, activation=activation, bias=False)
+    dense = Dense(num_filters, activation=C.sigmoid, bias=False)
+
+    @C.BlockFunction('SEBLock', name)
+    def inner(x):
+        channel_descriptors = C.reduce_mean(x, axis=[1, 2])
+        scale = C.expand_dims(C.expand_dims(dense(proj(channel_descriptors)), axis=-1), axis=-1)
+        return scale * x
+
+    return inner
+
+
+def SequenceSEBlock(num_filters: int, r: int = 16, activation=C.relu, name=''):
+    """ Squeeze and Excitation block
+    Input tensor `x` is assumed to be of shape (C, H) with a variable width dimension in the dyanmic sequence axis.
+
+    Arguments:
+        num_filters (int): number of output filters
+        r (int): reduction factor of the inner projection
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the operation to it
+    """
+
+    proj = Dense(num_filters // r, activation=activation, bias=False)
+    dense = Dense(num_filters, activation=C.sigmoid, bias=False)
+
+    @C.BlockFunction('SequenceSEBlock', name)
+    def inner(x):
+        channel_descriptors = Cx.sequence.reduce_mean(C.reduce_mean(x, axis=1))
+        scale = C.expand_dims(dense(proj(channel_descriptors)), axis=-1)
+        scale = C.sequence.broadcast_as(scale, x)
+        return scale * x
+
+    return inner

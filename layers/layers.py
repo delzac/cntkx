@@ -1892,3 +1892,36 @@ def SequenceSEBlock(num_filters: int, r: int = 16, activation=C.relu, name=''):
         return scale * x
 
     return inner
+
+
+def SIREN(shape, omega: float = 1., bias=True, name=''):
+    """ Sinusoidal Representation Network
+    SIREN leverages periodic activation functions for implicit neural representations and demonstrate
+    that these networks are ideally suited for representing complex natural signals and their derivatives.
+
+    Their project page can be found here "https://vsitzmann.github.io/siren/"
+
+    For more details please refer to the paper Implicit Neural Representations with PeriodicActivation Functions by
+    Sitzmann et. al. (https://arxiv.org/abs/2006.09661)
+
+    Note:
+        the first layer of a SIREN model should have omeage=30.
+
+    Arguments:
+        shape (`int` or `tuple` of `ints`): vector or tensor dimension of the output of this layer
+        omega:
+        bias (bool, optional, defaults to `True`): the layer will have no bias if `False` is passed here
+        name (str, defaults to ''): the name of the function instance in the network
+
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the operation to it
+
+    """
+    dense = Dense(shape, activation=C.sin, init=C.he_uniform(scale=1 / omega), bias=bias)
+
+    @C.BlockFunction('SIREN', name=name)
+    def inner(x):
+        return dense(omega * x)
+
+    return inner

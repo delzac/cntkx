@@ -71,6 +71,7 @@ cntkx only works with `python>=3.6`
 | `SequenceDropout` | Dropout entire sequence elements |
 | `SEBlock` | Squeeze and Excitation block |
 | `SequenceSEBlock` | Squeeze and Excitation block for variable width image sequence |
+| `SIREN` | Sinusoidal Representation Network |
 
 
 | Blocks | Description |
@@ -124,6 +125,17 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2020-06-19***
+### Added `SIREN`
+`SIREN` leverages periodic activation functions for implicit neural representations and demonstrate
+that these networks are ideally suited for representing complex natural signals and their derivatives.
+
+The results are incredible. It is highly recommended that you check out their [project page](https://vsitzmann.github.io/siren/).
+
+More details can be found in their paper [Implicit Neural Representations with PeriodicActivation Functions](https://arxiv.org/abs/2006.09661)
+
+
+
 ***2020-05-01***
 ### Added `SEBlock` and `SequenceSEBlock`
 `SEBlock` and `SequenceSEBlock` are squeeze-excitation blocks that adaptively recalibrates channel-wise feature

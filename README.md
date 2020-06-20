@@ -28,6 +28,7 @@ cntkx only works with `python>=3.6`
 | `gelu` | Gaussian Error Linear Unit function |
 | `gelu_fast` | fast approximation of Gaussian Error Linear Unit function |
 | `sequence.pad` | Pad at start or end of sequence axis |
+| `sequence.pad_to` | Pad a sequence to have the same length as another sequence |
 | `sequence.length` | length of sequence |
 | `sequence.position` | position of every sequence element |
 | `sequence.stride` | strides across sequential axis  |
@@ -125,6 +126,24 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2020-06-20***
+### Added `sequence.pad_to`
+`sequence.pad_to` pads a shorter sequence to the same sequence length as another longer sequence.
+This is especially useful in CTC training where both sequences need to have the same sequence length
+
+Example:
+
+    ax1 = C.Axis.new_unique_dynamic_axis('ax1')
+    ax2 = C.Axis.new_unique_dynamic_axis('ax2')
+    a = C.sequence.input_variable(3, sequence_axis=ax1)
+    b = C.sequence.input_variable(6, sequence_axis=ax2)
+    
+    c = Cx.sequence.pad_to(a, b)  # pad to same sequence length
+    
+    ctc_token = C.Constant(np.array([0, 0, 1]))
+    d = C.element_select(C.equal(c, 0), ctc_token, c)  # swap padded zeros with ctc token
+
+
 ***2020-06-19***
 ### Added `SIREN`
 `SIREN` leverages periodic activation functions for implicit neural representations and demonstrate

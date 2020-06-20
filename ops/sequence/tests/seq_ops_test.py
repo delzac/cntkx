@@ -1,7 +1,8 @@
 import cntk as C
 from cntkx.ops.sequence import length, pad, stride, position, join, window, reverse, reduce_mean, reduce_concat_pool
-from cntkx.ops.sequence import window_causal
+from cntkx.ops.sequence import window_causal, pad_to
 import numpy as np
+import pytest
 
 
 def test_sequence_length():
@@ -66,6 +67,38 @@ def test_sequence_pad1():
     assert result[0][0] == s1 + sum(pattern), result[0][0]
     assert result[1][0] == s2 + sum(pattern), result[0][0]
     assert b.shape == (input_dim, )
+
+
+def test_pad_to():
+    ax1 = C.Axis.new_unique_dynamic_axis('ax1')
+    ax2 = C.Axis.new_unique_dynamic_axis('ax2')
+    a = C.sequence.input_variable(3, sequence_axis=ax1)
+    b = C.sequence.input_variable(6, sequence_axis=ax2)
+
+    c = pad_to(a, b)
+
+    n1 = [np.random.random((10, 3)).astype(np.float32),
+          np.random.random((12, 3)).astype(np.float32),
+          np.random.random((14, 3)).astype(np.float32), ]
+
+    n2 = [np.random.random((10, 6)).astype(np.float32),
+          np.random.random((22, 6)).astype(np.float32),
+          np.random.random((24, 6)).astype(np.float32), ]
+
+    results = c.eval({a: n1, b: n2})
+
+    for x, y, result in zip(n1, n2, results):
+        assert y.shape[0] == result.shape[0]
+        assert x.shape[1] == result.shape[1]
+
+    with pytest.raises(ValueError):  # n2 cannot be shorter in sequence length
+        n1 = [np.random.random((10, 3)).astype(np.float32),
+              np.random.random((14, 3)).astype(np.float32), ]
+
+        n2 = [np.random.random((5, 6)).astype(np.float32),
+              np.random.random((2, 6)).astype(np.float32), ]
+
+        results = c.eval({a: n1, b: n2})
 
 
 def test_stride():

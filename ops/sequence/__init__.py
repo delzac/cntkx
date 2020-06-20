@@ -48,6 +48,45 @@ def zeros_like(x, seq_length: int):
     return b
 
 
+def pad_to(short_seq, long_seq, name=''):
+    """ pad the short_seq with zeros along its sequences axis until it has the same sequence length as long_seq
+
+    This is especially useful for ctc training where both the input sequence must be of the same sequence length.
+
+    Example:
+        ax1 = C.Axis.new_unique_dynamic_axis('ax1')
+        ax2 = C.Axis.new_unique_dynamic_axis('ax2')
+        a = C.sequence.input_variable(3, sequence_axis=ax1)
+        b = C.sequence.input_variable(6, sequence_axis=ax2)
+
+        c = Cx.sequence.pad_to(a, b)  # pad to same sequence length
+        assert c.shape == a.shape
+
+        ctc_token = C.Constant(np.array([0, 0, 1]))
+        d = C.element_select(C.equal(c, 0), ctc_token, c)  # swap padded zeros with ctc token
+
+    Arguments:
+        short_seq: input sequence tensor (short)
+        long_seq: input sequence tensor (long)
+        name (str, optional): the name of the Function instance in the network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+        a sequence tensor with the same sequence axis as long_seq and same dimensions as short_seq
+    """
+
+    @C.BlockFunction('Sequence::PadTo', name=name)
+    def inner(x, y):
+        length_x = length(x)
+        positions_y = position(y) + 1  # +1 because position starts from zero
+
+        valid_x = C.less_equal(positions_y, C.sequence.broadcast_as(length_x, positions_y))
+        padded = C.sequence.scatter(x, valid_x)
+        return padded  # [*, long_seq] [short_seq_dim, ]
+
+    return inner(short_seq, long_seq)
+
+
 @C.typemap
 def length(x, name=''):
     """

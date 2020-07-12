@@ -73,6 +73,8 @@ cntkx only works with `python>=3.6`
 | `SEBlock` | Squeeze and Excitation block |
 | `SequenceSEBlock` | Squeeze and Excitation block for variable width image sequence |
 | `SIREN` | Sinusoidal Representation Network |
+| `LinearAttention` | Linearised form of dot-product attention with linear memory complexity |
+| `LinearAttentionModel` | Wrapper to `LinearAttention` |
 
 
 | Blocks | Description |
@@ -126,6 +128,30 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2020-06-20***
+### Added `LinearAttention` and `LinearAttetionModel`
+Added cntk implementation of `LinearAttention` and `LinearAttetionModel`.
+Standard dot-product attention found in `Transformer` is quadratic in time and gpu memory complexity
+with respect to sequence length. The `C.layers.AttentionModel` is also quadratic.
+
+However, `LinearAttention` is a linearised form of dot-product attention. It is linear in time and gpu memory complexity
+with respect to sequence length. This is especially significant since `cntk` doesn't have any checkpointing function
+compared to other frameworks like `tensorflow` and `pytorch`, where it saves gpu memory at the expense of some
+computation overhead. Now, with `LinearAttention` training of `Transformer` can be done on `cntk` since the
+ gpu memory requirement is drastically reduced.
+
+`LinearAttetionModel` is wrapper for `LinearAttention` in the style of `C.layers.AttentionModel`.
+
+For more details refer to [Transformers are RNNs:Fast Autoregressive Transformers with Linear Attention](https://arxiv.org/abs/2006.16236) by Katharopoulos et al.
+
+Example:
+
+    a = C.sequence.input_variable(24)
+    b = LinearAttention(hidden_dim=32, model_dim=24)(a, a, a)
+
+    assert b.shape == (32, )
+
+
 ***2020-06-20***
 ### Added `sequence.pad_to`
 `sequence.pad_to` pads a shorter sequence to the same sequence length as another longer sequence.

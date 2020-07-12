@@ -8,6 +8,100 @@ from cntk.default_options import default_override_or
 from cntk.layers.blocks import _inject_name
 
 
+def LinearAttention(hidden_dim: int, model_dim: int,
+                    key_init=default_override_or(C.glorot_uniform()), key_init_bias=default_override_or(0),
+                    query_init=default_override_or(C.glorot_uniform()), query_init_bias=default_override_or(0),
+                    value_init=default_override_or(C.glorot_uniform()), value_init_bias=default_override_or(0),
+                    name=''):
+    """ Attention model that is linear in time and memory complexity.
+    This is a huge improvement from standard softmax attention models or self-attention
+    where the time and memory complexity is quadratic in sequence length.
+
+    This is especially significant since cntk doesn't have any build-in checkpointing functionality
+    that saves gpu memory and hence allow the training of Transformer models. With this attention,
+    it becomes possible to do transformer training on cntk.
+
+    This implementation addresses the limitation of attentions by express the attention
+    as a linear dot-product of kernel feature maps and made use of the associativity property of matrix products.
+
+    When query, key and value are all the same, it becomes self-attention.
+
+    For more details refer to "Transformers are RNNs:Fast Autoregressive Transformers with Linear Attention" by
+    Katharopoulos et al. (https://arxiv.org/abs/2006.16236)
+
+    Note:
+        Key and value must have the same sequence length
+
+    Example:
+        a = C.sequence.input_variable(24)
+        b = LinearAttention(hidden_dim=32, model_dim=24)(a, a, a)
+
+        assert b.shape == (32, )
+
+    Arguments:
+        hidden_dim (int): number of dim in final output, does of projection of Value
+        model_dim (int): number of dim in the attention
+        key_init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): initial value of weights `W`
+        key_init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
+        query_init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): initial value of weights `W`
+        query_init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
+        value_init (scalar or NumPy array or :mod:`cntk.initializer`, defaults to :func:`~cntk.initializer.glorot_uniform` ): initial value of weights `W`
+        value_init_bias (scalar or NumPy array or :mod:`cntk.initializer`, defaults to 0): initial value of weights `b`
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`:
+
+    """
+    query_linear = Dense(model_dim, init=query_init, init_bias=query_init_bias)
+    key_linear = Dense(model_dim, init=key_init, init_bias=key_init_bias)
+    value_linear = Dense(hidden_dim, init=value_init, init_bias=value_init_bias)
+
+    def phi(x):  # kernel
+        return C.elu(x) + 1
+
+    @C.BlockFunction('LinearAttention', name=name)
+    def model(query, key, value):
+        q = phi(query_linear(query))
+        k = phi(key_linear(key))
+        v = value_linear(value)
+
+        # key and value should have the same sequence length
+        k_unpacked = C.sequence.unpack(k, padding_value=0, no_mask_output=True)
+        # k_unpacked: [#] [*kv=, model_dim]
+        v_unpacked = C.sequence.unpack(v, padding_value=0, no_mask_output=True)
+        # v_unpacked: [#] [*kv=, hidden_dim]
+        kv = C.times(C.swapaxes(k_unpacked), v_unpacked)
+        # kv [#] [model_dim, hidden_dim]
+        kv_broadcasted = C.sequence.broadcast_as(kv, q)  # this can be reused across queries
+        # kv [#, *] [model_dim, hidden_dim]
+
+        numerator = C.squeeze(C.times(C.expand_dims(q, axis=C.Axis.new_leading_axis()), kv_broadcasted))
+        # numerator [#, *] [hidden_dim, ]
+        denom = C.reduce_sum(q * C.sequence.broadcast_as(C.sequence.reduce_sum(k), q))
+        # denom [#, *] [1]
+
+        return numerator / denom
+
+    return model
+
+
+def LinearAttentionModel(hidden_dim: int, model_dim: int,
+                         key_init=default_override_or(C.glorot_uniform()), key_init_bias=default_override_or(0),
+                         query_init=default_override_or(C.glorot_uniform()), query_init_bias=default_override_or(0),
+                         value_init=default_override_or(C.glorot_uniform()), value_init_bias=default_override_or(0),
+                         name=''):
+    """ Convenience wrapper in the style of cntk.layers.AttentionModel """
+    attention = LinearAttention(hidden_dim=hidden_dim, model_dim=model_dim,
+                                key_init=key_init, key_init_bias=key_init_bias,
+                                query_init=query_init, query_init_bias=query_init_bias,
+                                value_init=value_init, value_init_bias=value_init_bias, name=name)
+
+    def model(encoder_hidden_state, decoder_hidden_state):
+        return attention(decoder_hidden_state, encoder_hidden_state, encoder_hidden_state)
+
+    return model
+
+
 def ScaledDotProductAttention(obey_sequence_order: bool = None, max_seq_len: int = None, name=''):
     """
     Scaled dot-product attention implementation of "Attention is all you need", https://arxiv.org/abs/1706.03762
@@ -31,6 +125,7 @@ def ScaledDotProductAttention(obey_sequence_order: bool = None, max_seq_len: int
 
         assert b.shape == (10, )
 
+    Arguments:
         obey_sequence_order: do not let attention peek into future values
         max_seq_len: max sequence length possible, used to ensure that sequence order is obeyed
 

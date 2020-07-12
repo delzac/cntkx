@@ -2,7 +2,7 @@ import cntk as C
 from cntkx.layers.models import Transformer, TransformerDecoder, TransformerEncoder, MultiHeadAttention
 from cntkx.layers.models import MultiHeadAttentionBlock, TransformerEncoderBlock, TransformerDecoderBlock
 from cntkx.layers.models import ScaledDotProductAttention, GaussianWindowAttention, PreTrainedBertEncoder
-from cntkx.layers.models import PreTrainedBertModel, GaussianAttentionSeqImage
+from cntkx.layers.models import PreTrainedBertModel, GaussianAttentionSeqImage, LinearAttention, LinearAttentionModel
 import numpy as np
 import pytest
 
@@ -639,3 +639,23 @@ def test_gaussian_attention_image_seq():
     n1 = [np.random.random((10, dec_dim)).astype(np.float32), ]
     n2 = [np.random.random((8, channels, image_height)).astype(np.float32), ]
     results = b.eval({a: n1, encoded: n2})
+
+
+def test_linear_attention():
+    a = C.sequence.input_variable(24)
+    b = LinearAttention(hidden_dim=32, model_dim=24)(a, a, a)
+
+    assert b.shape == (32, )
+
+    n1 = [np.random.random((10, 24)) for __ in range(10)]
+    b.eval({a: n1})
+
+
+def test_linear_attention_model():
+    a = C.sequence.input_variable(24)
+    b = LinearAttentionModel(hidden_dim=32, model_dim=24)(a, a)
+
+    assert b.shape == (32, )
+
+    n1 = [np.random.random((10, 24)) for __ in range(10)]
+    b.eval({a: n1})

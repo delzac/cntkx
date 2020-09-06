@@ -48,7 +48,7 @@ def zeros_like(x, seq_length: int):
     return b
 
 
-def pad_to(short_seq, long_seq, name=''):
+def pad_to(short_seq, long_seq, padding_token=None, name=''):
     """ pad the short_seq with zeros along its sequences axis until it has the same sequence length as long_seq
 
     This is especially useful for ctc training where both the input sequence must be of the same sequence length.
@@ -68,6 +68,7 @@ def pad_to(short_seq, long_seq, name=''):
     Arguments:
         short_seq: input sequence tensor (short)
         long_seq: input sequence tensor (long)
+        padding_token: padding token to be padded on
         name (str, optional): the name of the Function instance in the network
 
     Returns:
@@ -75,16 +76,93 @@ def pad_to(short_seq, long_seq, name=''):
         a sequence tensor with the same sequence axis as long_seq and same dimensions as short_seq
     """
 
-    @C.BlockFunction('Sequence::PadTo', name=name)
-    def inner(x, y):
+    def _inner(x, y):
         length_x = length(x)
         positions_y = position(y) + 1  # +1 because position starts from zero
 
         valid_x = C.less_equal(positions_y, C.sequence.broadcast_as(length_x, positions_y))
         padded = C.sequence.scatter(x, valid_x)
+        return padded, valid_x
+
+    @C.BlockFunction('Sequence::PadTo', name=name)
+    def inner_padded(x, y, p):
+        padded, valid_x = _inner(x, y)
+
+        # replace zero pad by scatter with padding token
+        if p is not None:
+            broadcasted_padding_token = C.sequence.broadcast_as(p, padded)
+            padded = C.element_select(1 - valid_x, broadcasted_padding_token, padded)
+
         return padded  # [*, long_seq] [short_seq_dim, ]
 
+    @C.BlockFunction('Sequence::PadTo', name=name)
+    def inner(x, y):
+        padded, __ = _inner(x, y)
+        return padded  # [*, long_seq] [short_seq_dim, ]
+
+    if padding_token is not None:
+        return inner_padded(short_seq, long_seq, padding_token)
+
     return inner(short_seq, long_seq)
+
+
+def pad_ctc_labels(ctc_labels, network_output):
+    """ Pads the shorter truth label sequence to the same sequence length as the network output.
+    This should be used when the final sequence length of the network output cannot be determined
+    beforehand during the pre-processing of the ctc_labels. Thus, the padding is done during training runtime
+    instead of during the data pipeline processing.
+
+    The padding token would be the last sequence element of `ctc_labels`. `ctc_labels` should be
+    a one hot encoded vector sequence. The padding token will have the value of 1 in its one-hot encoded vector.
+
+    Example:
+        # first example
+        labels = C.sequence.input_variable(10)
+        network_outputs = model(...)
+
+        padded_labels = pad_ctc_labels(labels, network_outputs)
+
+
+        # second example
+        a = C.sequence.input_variable(3, sequence_axis=ax1)
+        b = C.sequence.input_variable(6, sequence_axis=ax2)
+
+        c = pad_ctc_labels(a, b)
+
+        padding_token = np.array([0, 0, 1])
+        n1 = [np.array([[0, 2, 0],
+                        [2, 0, 0],
+                        [0, 0, 2], ]).astype(np.float32), ]
+
+        n2 = [np.random.random((20, 6)).astype(np.float32),
+              np.random.random((22, 6)).astype(np.float32),
+              np.random.random((24, 6)).astype(np.float32), ]
+
+        n1 = n1 * len(n2)
+
+        results = c.eval({a: n1, b: n2})
+
+        for seq, result in zip(n2, results):
+
+            for r in results[3:]:
+                assert np.all(r == padding_token)
+
+            assert result.shape[0] == seq.shape[0]
+
+    Arguments:
+        ctc_labels: one-hot-encoded ctc labels tensor
+        network_output: output from model network
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+        a sequence tensor with the same sequence axis as network_output and ctc padded
+
+    """
+    last_labels = C.sequence.last(ctc_labels)  # last token has one-hot-encode value of 2 for ctc training
+    last_labels = C.element_select(last_labels, 1,  0)  # replace value of 2 with 1
+
+    padded_labels = pad_to(ctc_labels, network_output, padding_token=last_labels)
+    return padded_labels
 
 
 @C.typemap

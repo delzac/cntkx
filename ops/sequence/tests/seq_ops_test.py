@@ -1,6 +1,6 @@
 import cntk as C
 from cntkx.ops.sequence import length, pad, stride, position, join, window, reverse, reduce_mean, reduce_concat_pool
-from cntkx.ops.sequence import window_causal, pad_to
+from cntkx.ops.sequence import window_causal, pad_to, pad_ctc_labels
 import numpy as np
 import pytest
 
@@ -75,6 +75,8 @@ def test_pad_to():
     a = C.sequence.input_variable(3, sequence_axis=ax1)
     b = C.sequence.input_variable(6, sequence_axis=ax2)
 
+    # ========================================================================
+    # without padding
     c = pad_to(a, b)
 
     n1 = [np.random.random((10, 3)).astype(np.float32),
@@ -87,9 +89,28 @@ def test_pad_to():
 
     results = c.eval({a: n1, b: n2})
 
+    # checks padded to correct length
     for x, y, result in zip(n1, n2, results):
         assert y.shape[0] == result.shape[0]
         assert x.shape[1] == result.shape[1]
+    # ========================================================================
+
+    # ========================================================================
+    # with padding
+    p = C.sequence.last(a)  # padding token
+    c = pad_to(a, b, padding_token=p)
+
+    results = c.eval({a: n1, b: n2})
+
+    # checks padded to correct length
+    for x, y, result in zip(n1, n2, results):
+        assert y.shape[0] == result.shape[0]
+        assert x.shape[1] == result.shape[1]
+
+    # check correct padding token
+    for result in results[3:]:
+        assert np.all(result == n1[-1])
+    # ========================================================================
 
     with pytest.raises(ValueError):  # n2 cannot be shorter in sequence length
         n1 = [np.random.random((10, 3)).astype(np.float32),
@@ -99,6 +120,35 @@ def test_pad_to():
               np.random.random((2, 6)).astype(np.float32), ]
 
         results = c.eval({a: n1, b: n2})
+
+
+def test_pad_ctc_labels():
+    ax1 = C.Axis.new_unique_dynamic_axis('ax1')
+    ax2 = C.Axis.new_unique_dynamic_axis('ax2')
+    a = C.sequence.input_variable(3, sequence_axis=ax1)
+    b = C.sequence.input_variable(6, sequence_axis=ax2)
+
+    c = pad_ctc_labels(a, b)
+
+    padding_token = np.array([0, 0, 1])
+    n1 = [np.array([[0, 2, 0],
+                    [2, 0, 0],
+                    [0, 0, 2], ]).astype(np.float32), ]
+
+    n2 = [np.random.random((20, 6)).astype(np.float32),
+          np.random.random((22, 6)).astype(np.float32),
+          np.random.random((24, 6)).astype(np.float32), ]
+
+    n1 = n1 * len(n2)
+
+    results = c.eval({a: n1, b: n2})
+
+    for seq, result in zip(n2, results):
+
+        for r in results[3:]:
+            assert np.all(r == padding_token)
+
+        assert result.shape[0] == seq.shape[0]
 
 
 def test_stride():

@@ -1925,3 +1925,18 @@ def SIREN(shape, omega: float = 1., bias=True, name=''):
         return dense(omega * x)
 
     return inner
+
+
+def SeqATAC(num_filters: int, r: int, name=''):
+    """ Attention as Activation for variable width image sequences """
+    pw_seq_conv1 = SequentialConvolution(filter_shape=(1, 1), num_filters=num_filters // r, init=C.he_normal())
+    frn1 = FilterResponseNormalization(num_static_spatial_axes=1, seq_axis_is_spatial=True)
+
+    pw_seq_conv2 = SequentialConvolution(filter_shape=(1, 1), num_filters=num_filters)
+    frn2 = FilterResponseNormalization(num_static_spatial_axes=1, seq_axis_is_spatial=True)
+
+    @C.BlockFunction('SeqATAC', name=name)
+    def inner(x):
+        return C.sigmoid(frn2(pw_seq_conv2(C.relu(frn1(pw_seq_conv1(x))))))
+
+    return inner

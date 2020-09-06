@@ -37,6 +37,7 @@ cntkx only works with `python>=3.6`
 | `sequence.window_causal` | creates causal sliding window along the sequence axis  |
 | `sequence.reverse` | reverses the items along the dynamic sequence axis  |
 | `sequence.reduce_mean` | calculates the mean along the dynamic sequence axis  |
+| `sequence.pad_ctc_labels` | padded ctc labels to be the same sequence length as the network output  |
 | `sequence.reduce_concat_pool` | drop-in replace for sequence.last  |
 | `random.sample` | Samples an unnormalised log probability distribution |
 | `random.sample_with_bias` | Samples an unnormalised log probability distribution over-weighted to more probable classes |
@@ -128,6 +129,17 @@ it also contains some example implementations like seq2seq, autoencoder, LSTM, G
 
 
 ## News
+***2020-09-06***
+### Added `sequence.pad_ctc_labels`
+Pads the ctc label sequence to the same sequence length as the network output.
+This should be used when the final sequence length of the network output cannot be determined
+beforehand during the pre-processing of the ctc_labels. Thus, the padding is done during training runtime
+instead of during the data pipeline processing.
+
+The padding token would be the last sequence element of `ctc_labels`. `ctc_labels` should be
+a one hot encoded vector sequence. The padding token will have the value of 1 in its one-hot encoded vector.
+
+
 ***2020-06-20***
 ### Added `LinearAttention` and `LinearAttentionModel`
 Added cntk implementation of `LinearAttention` and `LinearAttentionModel`.

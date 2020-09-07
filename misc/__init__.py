@@ -9,6 +9,9 @@ def to_ctc_encoded(labels: np.ndarray) -> np.ndarray:
     All the 1s in labels will be replace with 2s. And any consecutive repeated labels will have a fake label
     inserted between then with the value 1.
 
+    This function can be used in your data preprocessing pipeline together with cntkx.sequence.pad_ctc_labels
+    to enable ctc training easily.
+    
     Arguments:
         labels (np.ndarray): numpy array labels that is already one hot encoded
 

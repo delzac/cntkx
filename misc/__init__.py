@@ -10,10 +10,10 @@ def to_ctc_encoded(labels: np.ndarray) -> np.ndarray:
     inserted between then with the value 1.
 
     Arguments:
-        labels (list): list of numpy array labels that is already one hot encoded
+        labels (np.ndarray): numpy array labels that is already one hot encoded
 
     Returns:
-        list of float32 ctc encoded labels that would be compatible with ctc training in cntk
+        float32 ctc encoded labels that would be compatible with ctc training in cntk
 
     """
 

@@ -4,6 +4,34 @@ from sklearn.preprocessing import LabelBinarizer
 from os.path import join, basename
 
 
+def to_ctc_encoded(labels: np.ndarray) -> np.ndarray:
+    """ Convert standard one hot encoded labels into ctc encoded that is compatible with ctc training in cntk.
+    All the 1s in labels will be replace with 2s. And any consecutive repeated labels will have a fake label
+    inserted between then with the value 1.
+
+    Arguments:
+        labels (list): list of numpy array labels that is already one hot encoded
+
+    Returns:
+        list of float32 ctc encoded labels that would be compatible with ctc training in cntk
+
+    """
+
+    # convert 1s to 2s. 2 denoted frame boundary
+    labels[labels == 1] = 2
+
+    # insert fake second frame if there are repeated labels adjacent to each other
+    double = [(i, a) for i, (a, b) in enumerate(zip(labels[:-1], labels[1:])) if np.all(a == b)]
+
+    if len(double) > 0:
+        indices, values = zip(*double)
+        values = [value / 2 for value in values]  # 1 to indicate within phone boundary
+        indices = [i + 1 for i in indices]  # np inserts before index
+        labels = np.insert(labels, indices, values, axis=0)
+
+    return labels
+
+
 class CTCEncoder:
     """ Class to help convert data into an acceptable format for ctc training.
 
@@ -59,15 +87,7 @@ class CTCEncoder:
 
         """
         labels_binarized = self.label_binarizer.transform(labels)
-
-        # insert fake second frame if there are repeated labels adjacent to each other
-        double = [(i, a) for i, (a, b) in enumerate(zip(labels_binarized[:-1], labels_binarized[1:])) if np.all(a == b)]
-
-        if len(double) > 0:
-            indices, values = zip(*double)
-            values = [value / 2 for value in values]  # 1 to indicate within phone boundary
-            indices = [i + 1 for i in indices]  # np inserts before index
-            labels_binarized = np.insert(labels_binarized, indices, values, axis=0)
+        labels_binarized = to_ctc_encoded(labels_binarized)
 
         if seq_length < labels_binarized.shape[0]:
             raise ValueError(f"seq_length ({seq_length}) is shorter than ctc labels ({labels_binarized.shape[0]}). It must be equal or larger after frame padding.")

@@ -1,7 +1,28 @@
-from .. import CTCEncoder
+from .. import CTCEncoder, to_ctc_encoded
 import cntk as C
 from cntk.layers import Dense, LSTM, Recurrence
 import numpy as np
+
+
+def test_to_ctc_encoded():
+    a = np.array([[0, 0, 1],
+                  [0, 0, 1],
+                  [0, 1, 0],
+                  [0, 0, 1],
+                  [1, 0, 0],
+                  [1, 0, 0], ])
+
+    desired = np.array([[0, 0, 2],
+                        [0, 0, 1],
+                        [0, 0, 2],
+                        [0, 2, 0],
+                        [0, 0, 2],
+                        [2, 0, 0],
+                        [1, 0, 0],
+                        [2, 0, 0], ])
+    b = to_ctc_encoded(a)
+
+    assert np.all(b == desired)
 
 
 def test_ctc_encoder_string_labels():

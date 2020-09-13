@@ -11,7 +11,7 @@ def to_ctc_encoded(labels: np.ndarray) -> np.ndarray:
 
     This function can be used in your data preprocessing pipeline together with cntkx.sequence.pad_ctc_labels
     to enable ctc training easily.
-    
+
     Arguments:
         labels (np.ndarray): numpy array labels that is already one hot encoded
 

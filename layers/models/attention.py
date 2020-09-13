@@ -59,7 +59,7 @@ def LinearAttention(hidden_dim: int, model_dim: int,
     def phi(x):  # kernel
         return C.elu(x) + 1
 
-    @C.BlockFunction('LinearAttention', name=name)
+    @C.Function
     def model(query, key, value):
         q = phi(query_linear(query))
         k = phi(key_linear(key))
